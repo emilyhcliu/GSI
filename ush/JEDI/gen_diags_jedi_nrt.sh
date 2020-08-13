@@ -8,20 +8,20 @@
 #SBATCH -t 00:30:00
 ##SBATCH -o ./LOG/%x.log
 ##SBATCH -e ./LOG/%x.err
-#SBATCH -o SLURM_%x.o%j
-#SBATCH -e SLURM_%x.e%j
+#SBATCH -o ./LOG/SLURM_%x.o%j
+#SBATCH -e ./LOG/SLURM_%x.e%j
 #SBATCH --mail-user=$LOGNAME@noaa.gov
 
 set -x 
 NOWTIME=`date +"%Y%m%d%H%M"`
 ### user defined arguments
-expid=JEDI-GSI-NRT-work-1
+expid=AOP75-NRT-work
 ObsDir=/scratch1/NCEPDEV/rstprod/com/gfs/prod
 GuessDir=/scratch1/NCEPDEV/rstprod/com/gfs/prod
 WorkDir=/scratch2/NCEPDEV/stmp1/$LOGNAME/${expid}/GSI_work/$adate
 OutDir_obs=/scratch2/NCEPDEV/stmp1/$LOGNAME/${expid}/output/${adate}_obs
 
-GSIDir=/scratch1/NCEPDEV/da/Emily.Liu/JEDI-GSI/GSI
+GSIDir=/scratch1/NCEPDEV/da/Emily.Liu/JEDI-AOP75/GSI-emilyhcliu
 gsiexec=$GSIDir/exec/global_gsi.x
 nccat=$GSIDir/exec/nc_diag_cat_serial.x
 fixgsi=$GSIDir/fix
