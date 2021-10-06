@@ -575,11 +575,15 @@ subroutine init_crtm(init_pass,mype_diaghdr,mype,nchanl,nreal,isis,obstype,radmo
  if( crtm_coeffs_path /= "" ) then
     if(init_pass .and. mype==mype_diaghdr .and. print_verbose) &
         write(6,*)myname_,': crtm_init() on path "'//trim(crtm_coeffs_path)//'"'
+    ! sieron
+    ! write(*,*) isis, sensorlist(1), crtm_coeffs_path
     error_status = crtm_init(sensorlist,channelinfo,&
        Process_ID=mype,Output_Process_ID=mype_diaghdr, &
        Load_CloudCoeff=Load_CloudCoeff,Load_AerosolCoeff=Load_AerosolCoeff, &
        File_Path = crtm_coeffs_path,quiet=quiet )
  else
+    ! sieron
+    ! write(*,*) isis, sensorlist(1)
     error_status = crtm_init(sensorlist,channelinfo,&
        Process_ID=mype,Output_Process_ID=mype_diaghdr, &
        Load_CloudCoeff=Load_CloudCoeff,Load_AerosolCoeff=Load_AerosolCoeff,&
@@ -1068,6 +1072,14 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   use obsmod, only: iadate
   use aeroinfo, only: nsigaerojac
   use chemmod, only: lread_ext_aerosol !for separate aerosol input file
+!>>emily
+  use crtm_cloudcover_define, only: cloudcover_maximum_overlap, &
+                                    cloudcover_random_overlap,  &
+                                    cloudcover_maxran_overlap,  &
+                                    cloudcover_average_overlap, &  !default
+                                    cloudcover_overcast_overlap
+
+!<<emily
 
   implicit none
 
@@ -1785,6 +1797,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   end do
   ! Calculate GFDL effective radius for each hydrometeor
   if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and. lprecip_wk) then
+     write(6,*)'emily checking: using calc_gfdl_reff ...'
      do ii = 1, n_clouds_fwd_wk
         iii=jcloud(ii)
        call calc_gfdl_reff(rho_air,h,cloud(:,ii),cloud_names(iii),cloudefr(:,ii))
@@ -1792,7 +1805,9 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   endif
 
   ! Calculate GFDL cloud fraction (if no cf in metguess table) based on PDF scheme 
-  if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and.  lcalc_gfdl_cfrac ) then
+! if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and.  lcalc_gfdl_cfrac ) then
+  if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and.  lprecip_wk ) then
+     write(6,*)'emily checking: using calc_gfdl_cloudfrac ...'
      cf_calc  = zero
      call calc_gfdl_cloudfrac(rho_air,h,qmix,cloud,hs,garea,cf_calc)
      cf   = cf_calc
@@ -1986,7 +2001,8 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
 
      if (n_clouds_fwd_wk>0) then
         kgkg_kgm2=(atmosphere(1)%level_pressure(k)-atmosphere(1)%level_pressure(k-1))*r100/grav
-        if (cw_cv.or.ql_cv) then
+!       if (cw_cv.or.ql_cv) then                           !orig
+        if ((cw_cv.or.ql_cv).and.(.not. lprecip_wk)) then  !emily
           if (icmask) then 
               c6(k) = kgkg_kgm2
               auxdp(k)=abs(prsi_rtm(kk+1)-prsi_rtm(kk))*r10
@@ -2015,6 +2031,20 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
                     cloud_cont(k,2)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,2))
               end do
 !crtm2.3.x    if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)   
+!>>emily
+!             In CRTM, if cloud fraction of the layer < 1.0E-12, set cloud
+!             content and
+!             effective radius of all hydrometer types in that layer to zero
+!             CRTM minimum thresholds: cloud content=1.0E-6 and cloud
+!             fraction=1.E-12
+              if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)
+              do ii=1,n_clouds_fwd_wk
+                 if(cloud_cont(k,ii) > 1.001_r_kind*1.0E-6_r_kind .and.  atmosphere(1)%cloud_fraction(k) < 1.001_r_kind*1.0E-12_r_kind) then
+!                  atmosphere(1)%cloud_fraction(k)=1.00_r_kind ! emily_test: overcast
+                   atmosphere(1)%cloud_fraction(k)=1.001_r_kind*1.0E-12_r_kind !                  ! original fix       
+                 end if
+              end do
+!<<emily
           endif   
         else 
            if (icmask) then
@@ -2023,9 +2053,9 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
                 !cloud_cont(k,ii)=cloud(kk2,ii)*kgkg_kgm2 
                  cloud_cont(k,ii)=cloud(kk2,ii)*c6(k)
                  if (imp_physics==11 .and. lprecip_wk .and.  cloud_cont(k,ii) > 1.0e-6_r_kind) then
-                    cloud_efr (k,ii)=cloudefr(kk2,ii)
+                    cloud_efr(k,ii)=cloudefr(kk2,ii)
                  else
-                    cloud_efr (k,ii)=zero
+                    cloud_efr(k,ii)=zero
                  endif
               enddo
              
@@ -2050,6 +2080,17 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
                      cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
               end do
 !crtm2.3.x    if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2) 
+!>>emily
+!             In CRTM, if cloud fraction of the layer < 1.0E-12, set cloud content and
+!             effective radius of all hydrometer types in that layer to zero
+!             CRTM minimum thresholds: cloud content=1.0E-6 and cloud fraction=1.E-12
+              if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)
+              do ii=1,n_clouds_fwd_wk
+                 if(cloud_cont(k,ii) > 1.001_r_kind*1.0E-6_r_kind .and.  atmosphere(1)%cloud_fraction(k) < 1.001_r_kind*1.0E-12_r_kind) then
+                   atmosphere(1)%cloud_fraction(k)=1.001_r_kind*1.0E-12_r_kind
+                 end if
+              end do
+!<<emily
            end if
         endif
      endif
@@ -2172,7 +2213,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
 !  Simulated brightness temperatures
        tsim(i)=rtsolution(i,1)%brightness_temperature
 
-!      if (present(tcc)) tcc(i)=rtsolution(i,1)%total_cloud_cover  !crtm2.3.x
+       if (present(tcc)) tcc(i)=rtsolution(i,1)%total_cloud_cover  !crtm2.3.x
 
        if (n_clouds_fwd_wk>0 .and. present(tsim_clr)) then
           if (mixed_use) then 

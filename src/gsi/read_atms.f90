@@ -483,7 +483,9 @@ subroutine read_atms(mype,val_tovs,ithin,isfcalc,&
 !          TMBR is actually the antenna temperature for most microwave sounders but for
 !          ATMS it is stored in TMANT.
 !          ATMS is assumed not to come via EARS
-           call ufbrep(lnbufr,data1b8,1,nchanl,iret,'TMANT')
+!          sieron: read TMBR brightness temperatures instead
+           !call ufbrep(lnbufr,data1b8,1,nchanl,iret,'TMANT')
+           call ufbrep(lnbufr,data1b8,1,nchanl,iret,'TMBR')
 
            bt_save(1:nchanl,iob) = data1b8(1:nchanl)
 

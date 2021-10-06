@@ -69,6 +69,8 @@ elif [ $target = wcoss -o $target = gaea ]; then
 elif [ $target = hera -o $target = cheyenne -o $target = orion ]; then
     module purge
     source $dir_modules/modulefile.ProdGSI.$target
+    export CRTM_LIB=/scratch1/NCEPDEV/da/Emily.Liu/RTM/CRTM/releases/REL-2.4.0_emc/lib/libcrtm.a
+    export CRTM_INC=/scratch1/NCEPDEV/da/Emily.Liu/RTM/CRTM/releases/REL-2.4.0_emc/include
 elif [ $target = wcoss_c ]; then
     module purge
     module load $dir_modules/modulefile.ProdGSI.$target

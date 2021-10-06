@@ -357,7 +357,8 @@ contains
   real(r_kind) factch6    
   real(r_kind) stability,tcwv,hwp_ratio         
   real(r_kind) si_obs,si_fg,si_mean                     
-  
+  real(r_kind) total_cloud_cover  !emily
+
   logical cao_flag                       
   logical hirs2,msu,goessndr,hirs3,hirs4,hirs,amsua,amsub,airs,hsb,goes_img,ahi,mhs,abi
   type(sparr2) :: dhx_dx
@@ -887,6 +888,7 @@ contains
 !       Output both tsim and tsim_clr for allsky
         tsim_clr=zero
         tcc=zero
+        total_cloud_cover=zero  !emily
         if (radmod%lcloud_fwd) then
           call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
              tvp,qvp,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
@@ -919,6 +921,8 @@ contains
              tsim_clr(10:13)    = tsim_clr2(10:13)
              cosza2 = cos(data_s(ilzen_ang2,n))
           endif
+          total_cloud_cover = tcc(1)  !emily
+          cld = total_cloud_cover     !emily
         else
           call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
              tvp,qvp,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
