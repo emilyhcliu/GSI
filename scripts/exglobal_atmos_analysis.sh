@@ -81,6 +81,7 @@ ntiles=${ntiles:-6}
 export imp_physics=${imp_physics:-99}
 lupp=${lupp:-".true."}
 cnvw_option=${cnvw_option:-".false."}
+cao_check=${cao_check:-".false."}
 
 # Diagnostic files options
 lobsdiag_forenkf=${lobsdiag_forenkf:-".false."}
@@ -461,6 +462,7 @@ for file in $(awk '{if($1!~"!"){print $1}}' satinfo | sort | uniq); do
    $NLN $RTMFIX/${file}.SpcCoeff.bin ./crtm_coeffs/
    $NLN $RTMFIX/${file}.TauCoeff.bin ./crtm_coeffs/
 done
+$NLN $RTMFIX/amsua_metop-a_v2.SpcCoeff.bin ./crtm_coeffs/amsua_metop-a_v2.SpcCoeff.bin
 
 $NLN $RTMFIX/Nalli.IRwater.EmisCoeff.bin   ./crtm_coeffs/Nalli.IRwater.EmisCoeff.bin
 $NLN $RTMFIX/NPOESS.IRice.EmisCoeff.bin    ./crtm_coeffs/NPOESS.IRice.EmisCoeff.bin
@@ -472,7 +474,8 @@ $NLN $RTMFIX/NPOESS.VISsnow.EmisCoeff.bin  ./crtm_coeffs/NPOESS.VISsnow.EmisCoef
 $NLN $RTMFIX/NPOESS.VISwater.EmisCoeff.bin ./crtm_coeffs/NPOESS.VISwater.EmisCoeff.bin
 $NLN $RTMFIX/FASTEM6.MWwater.EmisCoeff.bin ./crtm_coeffs/FASTEM6.MWwater.EmisCoeff.bin
 $NLN $RTMFIX/AerosolCoeff.bin              ./crtm_coeffs/AerosolCoeff.bin
-$NLN $RTMFIX/CloudCoeff.bin                ./crtm_coeffs/CloudCoeff.bin
+#$NLN $RTMFIX/CloudCoeff.bin                ./crtm_coeffs/CloudCoeff.bin
+$NLN /scratch1/NCEPDEV/da/Emily.Liu/git/cloudcoeff_GFDLFV3_BE.bin                ./crtm_coeffs/CloudCoeff.bin
 
 ##############################################################
 # Observational data
@@ -760,7 +763,7 @@ cat > gsiparm.anl << EOF
   crtm_coeffs_path='./crtm_coeffs/',
   newpc4pred=.true.,adp_anglebc=.true.,angord=4,passive_bc=.true.,use_edges=.false.,
   diag_precon=.true.,step_start=1.e-3,emiss_bc=.true.,nhr_obsbin=${nhr_obsbin:-3},
-  cwoption=3,imp_physics=$imp_physics,lupp=$lupp,cnvw_option=$cnvw_option,
+  cwoption=3,imp_physics=$imp_physics,lupp=$lupp,cnvw_option=$cnvw_option,cao_check=${cao_check},
   netcdf_diag=$netcdf_diag,binary_diag=$binary_diag,
   lobsdiag_forenkf=$lobsdiag_forenkf,
   write_fv3_incr=$write_fv3_increment,

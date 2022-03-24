@@ -279,7 +279,7 @@ contains
   use sst_retrieval, only: setup_sst_retrieval,avhrr_sst_retrieval,&
       finish_sst_retrieval,spline_cub
   use m_dtime, only: dtime_setup, dtime_check
-  use crtm_interface, only: init_crtm,call_crtm,destroy_crtm,sensorindex,surface, &
+  use crtm_interface, only: init_crtm,call_crtm,destroy_crtm,sensorindex,surface,&
       itime,ilon,ilat,ilzen_ang,ilazi_ang,iscan_ang,iscan_pos,iszen_ang,isazi_ang, &
       ifrac_sea,ifrac_lnd,ifrac_ice,ifrac_sno,itsavg, &
       izz,idomsfc,isfcr,iff10,ilone,ilate, &
@@ -357,7 +357,8 @@ contains
   real(r_kind) factch6    
   real(r_kind) stability,tcwv,hwp_ratio         
   real(r_kind) si_obs,si_fg,si_mean                     
-  
+  real(r_kind) total_cloud_cover  !emily
+
   logical cao_flag                       
   logical hirs2,msu,goessndr,hirs3,hirs4,hirs,amsua,amsub,airs,hsb,goes_img,ahi,mhs,abi
   type(sparr2) :: dhx_dx
@@ -887,6 +888,7 @@ contains
 !       Output both tsim and tsim_clr for allsky
         tsim_clr=zero
         tcc=zero
+        total_cloud_cover=zero  !emily
         if (radmod%lcloud_fwd) then
           call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
              tvp,qvp,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
@@ -919,6 +921,8 @@ contains
              tsim_clr(10:13)    = tsim_clr2(10:13)
              cosza2 = cos(data_s(ilzen_ang2,n))
           endif
+          total_cloud_cover = tcc(1)  !emily
+          cld = total_cloud_cover     !emily
         else
           call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
              tvp,qvp,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
@@ -1582,9 +1586,11 @@ contains
               m=ich(i)
               if(radmod%lcloud_fwd .and. eff_area) then
                  if(radmod%rtype == 'amsua' .and. (i <=5 .or. i==15) ) then 
-                    errf(i) = three*errf(i)    
+                 !  errf(i) = three*errf(i)         !orig    
+                    errf(i) = 2.5_r_kind*errf(i)    !emily
                  else if(radmod%rtype == 'atms' .and. (i <= 6 .or. i>=16) ) then
-                    errf(i) = min(three*errf(i),10.0_r_kind)    
+                 !  errf(i) = min(three*errf(i),10.0_r_kind)       !orig
+                    errf(i) = min(2.5_r_kind*errf(i),10.0_r_kind)  !emily    
                  else if(radmod%rtype == 'gmi') then
                     errf(i) = min(2.0_r_kind*errf(i),ermax_rad(m))
                  else if (radmod%rtype/='amsua' .and. radmod%rtype/='atms' .and. radmod%rtype/='gmi' .and. radmod%lcloud4crtm(i)>=0) then
