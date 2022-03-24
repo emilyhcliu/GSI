@@ -116,8 +116,12 @@ contains
 !$$$ end documentation block
 
     use kinds, only: i_kind,r_kind
+    ! sieron
+    use constants, only: qcmin
     use gridmod, only: sp_a,grd_a,lat2,lon2,nsig
-    use guess_grids, only: ifilesig,nfldsig
+    ! sieron
+    ! use guess_grids, only: ifilesig,nfldsig
+    use guess_grids, only: ifilesig,nfldsig,ntguessig
     use gsi_metguess_mod, only: gsi_metguess_bundle
     use gsi_bundlemod, only: gsi_bundlegetpointer
     use gsi_bundlemod, only: gsi_bundlecreate
@@ -128,12 +132,19 @@ contains
     use general_sub2grid_mod, only: sub2grid_info,general_sub2grid_create_info,general_sub2grid_destroy_info
     use mpimod, only: npe,mype
     use cloud_efr_mod, only: cloud_calc_gfs,set_cloud_lower_bound
+    ! sieron
+    use gridmod, only: fv3_full_hydro
+
     implicit none
 
     character(len=*),parameter::myname_=myname//'*read_'
     character(24) filename
     integer(i_kind):: it, istatus, inner_vars, num_fields
-    integer(i_kind):: iret_ql,iret_qi
+    ! sieron
+    integer(i_kind):: iret_ql,iret_qi,iret_qr,iret_qs,iret_qg
+    ! sieron
+    integer(i_kind):: i,j,k
+
 
     real(r_kind),pointer,dimension(:,:  ):: ges_ps_it  =>NULL()
     real(r_kind),pointer,dimension(:,:  ):: ges_z_it   =>NULL()
@@ -147,6 +158,11 @@ contains
     real(r_kind),pointer,dimension(:,:,:):: ges_cwmr_it=>NULL()
     real(r_kind),pointer,dimension(:,:,:):: ges_ql_it  => NULL()
     real(r_kind),pointer,dimension(:,:,:):: ges_qi_it  => NULL()
+    ! sieron
+    real(r_kind),pointer,dimension(:,:,:):: ges_qr_it  => NULL()
+    real(r_kind),pointer,dimension(:,:,:):: ges_qs_it  => NULL()
+    real(r_kind),pointer,dimension(:,:,:):: ges_qg_it  => NULL()
+    real(r_kind),pointer,dimension(:,:,:):: ges_cf_it  => NULL()
 
     type(sub2grid_info) :: grd_t
     logical regional
@@ -155,12 +171,22 @@ contains
     type(gsi_bundle) :: atm_bundle
     type(gsi_grid)   :: atm_grid
     integer(i_kind),parameter :: n2d=2
-    integer(i_kind),parameter :: n3d=8
+    ! sieron
+    ! integer(i_kind),parameter :: n3d=8
+    integer(i_kind),parameter :: n3d=14
     character(len=4), parameter :: vars2d(n2d) = (/ 'z   ', 'ps  ' /)
+    ! sieron
+    ! character(len=4), parameter :: vars3d(n3d) = (/ 'u   ', 'v   ', &
+    !                                                 'vor ', 'div ', &
+    !                                                 'tv  ', 'q   ', &
+    !                                                 'cw  ', 'oz  ' /)
     character(len=4), parameter :: vars3d(n3d) = (/ 'u   ', 'v   ', &
                                                     'vor ', 'div ', &
                                                     'tv  ', 'q   ', &
-                                                    'cw  ', 'oz  ' /)
+                                                    'cw  ', 'oz  ', &
+                                                    'ql  ', 'qi  ', &
+                                                    'qr  ', 'qs  ', &
+                                                    'qg  ', 'cf  ' /)
     real(r_kind),pointer,dimension(:,:):: ptr2d   =>NULL()
     real(r_kind),pointer,dimension(:,:,:):: ptr3d =>NULL()
 
@@ -173,6 +199,7 @@ contains
 
 !   Allocate bundle used for reading members
     call gsi_gridcreate(atm_grid,lat2,lon2,nsig)
+
     call gsi_bundlecreate(atm_bundle,atm_grid,'aux-atm-read',istatus,names2d=vars2d,names3d=vars3d)
     if(istatus/=0) then
       write(6,*) myname_,': trouble creating atm_bundle'
@@ -184,26 +211,66 @@ contains
        write(filename,'(''sigf'',i2.2)') ifilesig(it)
 
 !      Read background fields into bundle
-       call general_read_gfsatm_nc(grd_t,sp_a,filename,.true.,.true.,.true.,&
-            atm_bundle,.true.,istatus)
+       ! sieron
+       if (fv3_full_hydro) then
+          if (mype==0) write(*,*) 'calling general_read_gfsatm_allhydro_nc', it
+          call general_read_gfsatm_allhydro_nc(grd_t,sp_a,filename,.true.,.true.,.true.,&
+              atm_bundle,.true.,istatus) ! this loads cloud and precip
+          if (mype==0) write(*,*) 'done with general_read_gfsatm_allhydro_nc', it 
+       else
+          if (mype==0) write(*,*) 'calling general_read_gfsatm_nc'
+          call general_read_gfsatm_nc(grd_t,sp_a,filename,.true.,.true.,.true.,&
+              atm_bundle,.true.,istatus)
+          if (mype==0) write(*,*) 'done with general_read_gfsatm_nc'
+       end if
 
        inithead=.false.
        zflag=.false.
 
 !      Set values to actual MetGuess fields
+       !if (mype==0) write(*,*) 'about to call set_guess'
        call set_guess_
+       !if (mype==0) write(*,*) 'done with set_guess'
 
-       l_cld_derived = associated(ges_cwmr_it).and.&
-                       associated(ges_q_it)   .and.&
-                       associated(ges_ql_it)  .and.&
-                       associated(ges_qi_it)  .and.&
-                       associated(ges_tv_it)
-!      call set_cloud_lower_bound(ges_cwmr_it)
-       if (mype==0) write(6,*)'READ_GFS_NETCDF: l_cld_derived = ', l_cld_derived
+       ! sieron, based on ncepnems_io.f90 read_
+       if (it==ntguessig) then
+          if (mype==0) write(6,*)'Print guess field ... after set_guess'
+          call prt_guess('guess')
+       endif
+       if (fv3_full_hydro) then
+          do k=1, nsig
+             do j=1, lon2
+                do i=1, lat2
+                   ! set lower bound to hydrometeors
+                   if (associated(ges_ql_it)) ges_ql_it(i,j,k) = max(qcmin,ges_ql_it(i,j,k))
+                   if (associated(ges_qi_it)) ges_qi_it(i,j,k) = max(qcmin,ges_qi_it(i,j,k))
+                   if (associated(ges_qr_it)) ges_qr_it(i,j,k) = max(qcmin,ges_qr_it(i,j,k))
+                   if (associated(ges_qs_it)) ges_qs_it(i,j,k) = max(qcmin,ges_qs_it(i,j,k))
+                   if (associated(ges_qg_it)) ges_qg_it(i,j,k) = max(qcmin,ges_qg_it(i,j,k))
+                   if (associated(ges_cf_it)) ges_cf_it(i,j,k) = min(max(zero,ges_cf_it(i,j,k)),one)
+                enddo
+             enddo
+          enddo
+       else
+       ! end sieron, this if/else wasn't here before
+          l_cld_derived = associated(ges_cwmr_it).and.&
+                          associated(ges_q_it)   .and.&
+                          associated(ges_ql_it)  .and.&
+                          associated(ges_qi_it)  .and.& 
+                          associated(ges_tv_it)
+!         call set_cloud_lower_bound(ges_cwmr_it)
+          if (mype==0) write(6,*)'READ_GFS_NETCDF: l_cld_derived = ', l_cld_derived
 
-       if (l_cld_derived) then
-          call cloud_calc_gfs(ges_ql_it,ges_qi_it,ges_cwmr_it,ges_q_it,ges_tv_it,.true.)
+          if (l_cld_derived) then
+             call cloud_calc_gfs(ges_ql_it,ges_qi_it,ges_cwmr_it,ges_q_it,ges_tv_it,.true.)
+          end if
        end if
+!>>emily
+       if (it==ntguessig) then
+          if (mype==0) write(6,*)'Print guess field ... after set lower bound for hydrometers'
+          call prt_guess('guess')
+       endif
+!<<emily
 
     end do
     call general_sub2grid_destroy_info(grd_t)
@@ -263,15 +330,62 @@ contains
        call gsi_bundlegetpointer (gsi_metguess_bundle(it),'cw',ges_cwmr_it,istatus)
        if(istatus==0) ges_cwmr_it = ptr3d
     endif
-    call gsi_bundlegetpointer (gsi_metguess_bundle(it),'ql',ges_ql_it,  iret_ql)
-    call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qi',ges_qi_it,  iret_qi)
-    if (iret_ql/=0) then
-       if (mype==0) write(6,*)'READ_ NETCDF: cannot get pointer to ql,iret_ql=',iret_ql
+!>>emily
+    call gsi_bundlegetpointer (atm_bundle,'ql',ptr3d,istatus)
+    if (istatus==0) then
+       call gsi_bundlegetpointer (gsi_metguess_bundle(it),'ql',ges_ql_it,istatus)
+       if(istatus==0) ges_ql_it = ptr3d
     endif
-    if (iret_qi/=0) then
-       if (mype==0) write(6,*)'READ_ NETCDF: cannot get pointer to qi,iret_qi=',iret_qi
+    call gsi_bundlegetpointer (atm_bundle,'qi',ptr3d,istatus)
+    if (istatus==0) then
+       call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qi',ges_qi_it,istatus)
+       if(istatus==0) ges_qi_it = ptr3d
     endif
+    call gsi_bundlegetpointer (atm_bundle,'qr',ptr3d,istatus)
+    if (istatus==0) then
+       call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qr',ges_qr_it,istatus)
+       if(istatus==0) ges_qr_it = ptr3d
+    endif
+    call gsi_bundlegetpointer (atm_bundle,'qs',ptr3d,istatus)
+    if (istatus==0) then
+       call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qs',ges_qs_it,istatus)
+       if(istatus==0) ges_qs_it = ptr3d
+    endif
+    call gsi_bundlegetpointer (atm_bundle,'qg',ptr3d,istatus)
+    if (istatus==0) then
+       call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qg',ges_qg_it,istatus)
+       if(istatus==0) ges_qg_it = ptr3d
+    endif
+    call gsi_bundlegetpointer (atm_bundle,'cf',ptr3d,istatus)
+    if (istatus==0) then
+       call gsi_bundlegetpointer (gsi_metguess_bundle(it),'cf',ges_cf_it,istatus)
+       if(istatus==0) ges_cf_it = ptr3d
+    endif
+!<<emily
 
+!>>orig from sieron
+!    call gsi_bundlegetpointer (gsi_metguess_bundle(it),'ql',ges_ql_it,  iret_ql)
+!    call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qi',ges_qi_it,  iret_qi)
+!    ! sieron
+!    call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qr',ges_qr_it,  iret_qr)
+!    call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qs',ges_qs_it,  iret_qs)
+!    call gsi_bundlegetpointer (gsi_metguess_bundle(it),'qg',ges_qg_it,  iret_qg)
+!    if (iret_ql/=0) then
+!       if (mype==0) write(6,*)'READ_ NETCDF: cannot get pointer to ql,iret_ql=',iret_ql
+!    endif
+!    if (iret_qi/=0) then
+!       if (mype==0) write(6,*)'READ_ NETCDF: cannot get pointer to qi,iret_qi=',iret_qi
+!    endif
+!    if (iret_qr/=0) then
+!       if (mype==0) write(6,*)'READ_ NETCDF: cannot get pointer to qr,iret_qr=',iret_qr
+!    endif
+!    if (iret_qs/=0) then
+!       if (mype==0) write(6,*)'READ_ NETCDF: cannot get pointer to qs,iret_qs=',iret_qs
+!    endif
+!    if (iret_qg/=0) then
+!       if (mype==0) write(6,*)'READ_ NETCDF: cannot get pointer to qg,iret_qg=',iret_qg
+!    endif
+!<<orig from sieron
   end subroutine set_guess_
 
   end subroutine read_

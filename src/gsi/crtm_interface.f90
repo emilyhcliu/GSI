@@ -344,7 +344,7 @@ subroutine init_crtm(init_pass,mype_diaghdr,mype,nchanl,nreal,isis,obstype,radmo
 
 ! local parameters
   character(len=*), parameter :: myname_=myname//'*init_crtm'
-  integer(i_kind), parameter :: length = 2621  ! lenth of GFL qsat table
+  integer(i_kind), parameter :: length = 2621  ! length of GFL qsat table
 
 ! local variables
   integer(i_kind) :: ier,ii,error_status,iderivative
@@ -575,11 +575,15 @@ subroutine init_crtm(init_pass,mype_diaghdr,mype,nchanl,nreal,isis,obstype,radmo
  if( crtm_coeffs_path /= "" ) then
     if(init_pass .and. mype==mype_diaghdr .and. print_verbose) &
         write(6,*)myname_,': crtm_init() on path "'//trim(crtm_coeffs_path)//'"'
+    ! sieron
+    ! write(*,*) isis, sensorlist(1), crtm_coeffs_path
     error_status = crtm_init(sensorlist,channelinfo,&
        Process_ID=mype,Output_Process_ID=mype_diaghdr, &
        Load_CloudCoeff=Load_CloudCoeff,Load_AerosolCoeff=Load_AerosolCoeff, &
        File_Path = crtm_coeffs_path,quiet=quiet )
  else
+    ! sieron
+    ! write(*,*) isis, sensorlist(1)
     error_status = crtm_init(sensorlist,channelinfo,&
        Process_ID=mype,Output_Process_ID=mype_diaghdr, &
        Load_CloudCoeff=Load_CloudCoeff,Load_AerosolCoeff=Load_AerosolCoeff,&
@@ -1048,7 +1052,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   use radinfo, only: nsigradjac
   use gsi_nstcouplermod, only: nst_gsi
   use guess_grids, only: ges_tsen,&
-      ges_prsl,ges_prsi,tropprs,dsfct,add_rtm_layers, &
+      ges_prsl,ges_prsi,ges_qsat,tropprs,dsfct,add_rtm_layers, &  !emily_qsat
       hrdifsig,nfldsig,hrdifsfc,nfldsfc,ntguessfc,isli2,sno2, &
       hrdifaer,nfldaer ! for separate aerosol input file
   use cloud_efr_mod, only: efr_ql,efr_qi,efr_qr,efr_qs,efr_qg,efr_qh
@@ -1068,6 +1072,14 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   use obsmod, only: iadate
   use aeroinfo, only: nsigaerojac
   use chemmod, only: lread_ext_aerosol !for separate aerosol input file
+!>>emily
+  use crtm_cloudcover_define, only: cloudcover_maximum_overlap, &
+                                    cloudcover_random_overlap,  &
+                                    cloudcover_maxran_overlap,  &
+                                    cloudcover_average_overlap, &  !default
+                                    cloudcover_overcast_overlap
+
+!<<emily
 
   implicit none
 
@@ -1120,6 +1132,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   integer(i_kind):: idx700,dprs,dprs_min  
   integer(i_kind),dimension(8)::obs_time,anal_time
   integer(i_kind),dimension(msig) :: klevel
+  real(r_kind),dimension(nsig) :: qsat  !emily_qsat
 
 ! ****************************** 
 ! Constrained indexing for lai
@@ -1185,6 +1198,16 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   if (present(hwp_ratio)) hwp_ratio=zero  
   if (present(tcwv)) tcwv=zero           
   if (present(tcc)) tcc=zero           
+
+!>>emily
+  if (n_clouds_fwd_wk>0) then
+     cloud = zero
+     cloud_cont = zero
+     cloud_efr = zero
+     cloudefr = zero
+     cf = zero
+  endif
+!<<emily
 
   dx  = data_s(ilat)                 ! grid relative latitude
   dy  = data_s(ilon)                 ! grid relative longitude
@@ -1696,6 +1719,20 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
      else
         q(k)  = qsmall
      endif
+
+!>>emily_qsat
+     if (n_clouds_fwd_wk>0) then
+        qsat(k)=(ges_qsat (ix ,iy ,k, itsig)*w00+ &
+                 ges_qsat (ixp,iy ,k, itsig)*w10+ &
+                 ges_qsat (ix ,iyp,k, itsig)*w01+ &
+                 ges_qsat (ixp,iyp,k, itsig)*w11)*dtsig + &
+                (ges_qsat (ix ,iy ,k, itsigp)*w00+ &
+                 ges_qsat (ixp,iy ,k, itsigp)*w10+ &
+                 ges_qsat (ix ,iyp,k, itsigp)*w01+ &
+                 ges_qsat (ixp,iyp,k, itsigp)*w11)*dtsigp
+     end if
+!<<emily_qsat
+
      c2(k)=one/(one+fv*q(k))
      c3(k)=one/(one-q(k))
      c4(k)=fv*h(k)*c2(k)
@@ -1785,6 +1822,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   end do
   ! Calculate GFDL effective radius for each hydrometeor
   if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and. lprecip_wk) then
+!     write(6,*)'emily checking: using calc_gfdl_reff ...'
      do ii = 1, n_clouds_fwd_wk
         iii=jcloud(ii)
        call calc_gfdl_reff(rho_air,h,cloud(:,ii),cloud_names(iii),cloudefr(:,ii))
@@ -1792,9 +1830,12 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   endif
 
   ! Calculate GFDL cloud fraction (if no cf in metguess table) based on PDF scheme 
-  if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and.  lcalc_gfdl_cfrac ) then
+! if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and.  lcalc_gfdl_cfrac ) then
+  if ( icmask .and. n_clouds_fwd_wk > 0 .and. imp_physics==11 .and.  lprecip_wk ) then
+!     write(6,*)'emily checking: using calc_gfdl_cloudfrac ...'
      cf_calc  = zero
-     call calc_gfdl_cloudfrac(rho_air,h,qmix,cloud,hs,garea,cf_calc)
+!    call calc_gfdl_cloudfrac(rho_air,h,qmix,cloud,hs,garea,cf_calc)         !orig
+     call calc_gfdl_cloudfrac(rho_air,h,q,cloud,hs,garea,qsat,cf_calc)       !emily_qsat
      cf   = cf_calc
      icfs = 0        ! load cloud fraction into CRTM 
   endif
@@ -1986,7 +2027,8 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
 
      if (n_clouds_fwd_wk>0) then
         kgkg_kgm2=(atmosphere(1)%level_pressure(k)-atmosphere(1)%level_pressure(k-1))*r100/grav
-        if (cw_cv.or.ql_cv) then
+!       if (cw_cv.or.ql_cv) then                           !orig
+        if ((cw_cv.or.ql_cv).and.(.not. lprecip_wk)) then  !emily
           if (icmask) then 
               c6(k) = kgkg_kgm2
               auxdp(k)=abs(prsi_rtm(kk+1)-prsi_rtm(kk))*r10
@@ -2014,7 +2056,19 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
                  if (ii==2 .and. atmosphere(1)%temperature(k)<t0c) &
                     cloud_cont(k,2)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,2))
               end do
-!crtm2.3.x    if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)   
+!crtm2.3.x    if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)
+!>>emily
+!             In CRTM, if cloud fraction of the layer < 1.0E-12, set cloud content and
+!             effective radius of all hydrometer types in that layer to zero
+!             CRTM minimum thresholds: cloud content=1.0E-6 and cloud fraction=1.E-12
+              if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)
+              do ii=1,n_clouds_fwd_wk
+!                if(cloud_cont(k,ii) > 1.001_r_kind*1.0E-6_r_kind .and.  atmosphere(1)%cloud_fraction(k) < 1.001_r_kind*1.0E-12_r_kind) then  !orig
+                 if(cloud_cont(k,ii) > 1.000_r_kind*1.0E-6_r_kind .and.  atmosphere(1)%cloud_fraction(k) < 1.001_r_kind*1.0E-12_r_kind) then  !emily debug
+                   atmosphere(1)%cloud_fraction(k)=1.001_r_kind*1.0E-12_r_kind       
+                 end if
+              end do
+!<<emily
           endif   
         else 
            if (icmask) then
@@ -2023,12 +2077,23 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
                 !cloud_cont(k,ii)=cloud(kk2,ii)*kgkg_kgm2 
                  cloud_cont(k,ii)=cloud(kk2,ii)*c6(k)
                  if (imp_physics==11 .and. lprecip_wk .and.  cloud_cont(k,ii) > 1.0e-6_r_kind) then
-                    cloud_efr (k,ii)=cloudefr(kk2,ii)
+                    cloud_efr(k,ii)=cloudefr(kk2,ii)
                  else
-                    cloud_efr (k,ii)=zero
+                    cloud_efr(k,ii)=zero
                  endif
               enddo
-             
+            
+!>>emily_test
+!             In CRTM, if cloud fraction of the layer < 1.0E-12, set cloud content and
+!             effective radius of all hydrometer types in that layer to zero
+!             CRTM minimum thresholds: cloud content=1.0E-6 and cloud fraction=1.E-12
+              do ii=1,n_clouds_fwd_wk
+                 if(cloud_cont(k,ii) > 1.000_r_kind*1.0E-6_r_kind .and. cf(kk2) < 1.000_r_kind*1.0E-12_r_kind) then
+                    cf(kk2)=1.001_r_kind*1.0E-12_r_kind
+                 end if
+              end do
+!<<emily_test
+ 
               if (cloud_cont(k,1) >= 1.0e-6_r_kind) clw_guess = clw_guess +  cloud_cont(k,1)        
               tcwv = tcwv + (atmosphere(1)%absorber(k,1)*0.001_r_kind)*c6(k)
               do ii=1,n_clouds_fwd_wk
@@ -2038,18 +2103,55 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
                 !Add lower bound to all hydrometers 
                 !note: may want to add lower bound value for effective radius  
               do ii=1,n_clouds_fwd_wk
-                 if (trim(cloud_names_fwd(ii))=='ql' .and.  atmosphere(1)%temperature(k)-t0c>-20.0_r_kind) &
+!>>orig
+!                 if (trim(cloud_names_fwd(ii))=='ql' .and.  atmosphere(1)%temperature(k)-t0c>-20.0_r_kind) &
+!                     cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
+!                 if (trim(cloud_names_fwd(ii))=='qi' .and.  atmosphere(1)%temperature(k)<t0c) &
+!                     cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
+!                 if (trim(cloud_names_fwd(ii))=='qr' .and.  atmosphere(1)%temperature(k)-t0c>-20.0_r_kind) &
+!                     cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
+!                 if (trim(cloud_names_fwd(ii))=='qs' .and.  atmosphere(1)%temperature(k)<t0c) &
+!                     cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
+!                 if (trim(cloud_names_fwd(ii))=='qg' .and.  atmosphere(1)%temperature(k)<t0c) &
+!                     cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
+!<<orig
+!>>emily_test
+                 if (trim(cloud_names_fwd(ii))=='ql' .and.  atmosphere(1)%temperature(k)-t0c>-20.0_r_kind) then
                      cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
-                 if (trim(cloud_names_fwd(ii))=='qi' .and.  atmosphere(1)%temperature(k)<t0c) &
+                     cloud_efr(k,ii)=max(5.001_r_kind, cloud_efr(k,ii))
+                 endif
+                 if (trim(cloud_names_fwd(ii))=='qi' .and.  atmosphere(1)%temperature(k)<t0c) then
                      cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
-                 if (trim(cloud_names_fwd(ii))=='qr' .and.  atmosphere(1)%temperature(k)-t0c>-20.0_r_kind) &
+                     cloud_efr(k,ii)=max(5.001_r_kind, cloud_efr(k,ii))
+                 endif
+                 if (trim(cloud_names_fwd(ii))=='qr' .and.  atmosphere(1)%temperature(k)-t0c>-20.0_r_kind) then
                      cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
-                 if (trim(cloud_names_fwd(ii))=='qs' .and.  atmosphere(1)%temperature(k)<t0c) &
+                     cloud_efr(k,ii)=max(5.001_r_kind, cloud_efr(k,ii))
+                 endif
+                 if (trim(cloud_names_fwd(ii))=='qs' .and.  atmosphere(1)%temperature(k)<t0c) then
                      cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
-                 if (trim(cloud_names_fwd(ii))=='qg' .and.  atmosphere(1)%temperature(k)<t0c) &
+                     cloud_efr(k,ii)=max(5.001_r_kind, cloud_efr(k,ii))
+                 endif
+                 if (trim(cloud_names_fwd(ii))=='qg' .and.  atmosphere(1)%temperature(k)<t0c) then
                      cloud_cont(k,ii)=max(1.001_r_kind*1.0E-6_r_kind, cloud_cont(k,ii))
+                     cloud_efr(k,ii)=max(5.001_r_kind, cloud_efr(k,ii))
+                 endif
+!<<emily_test
+
               end do
-!crtm2.3.x    if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2) 
+!crtm2.3.x    if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)
+!>>emily
+!             In CRTM, if cloud fraction of the layer < 1.0E-12, set cloud content and
+!             effective radius of all hydrometer types in that layer to zero
+!             CRTM minimum thresholds: cloud content=1.0E-6 and cloud fraction=1.E-12
+              if (.not. regional .and. icfs==0 ) atmosphere(1)%cloud_fraction(k) = cf(kk2)
+              do ii=1,n_clouds_fwd_wk
+!                if(cloud_cont(k,ii) > 1.001_r_kind*1.0E-6_r_kind .and.  atmosphere(1)%cloud_fraction(k) < 1.001_r_kind*1.0E-12_r_kind) then  !orig
+                 if(cloud_cont(k,ii) > 1.000_r_kind*1.0E-6_r_kind .and.  atmosphere(1)%cloud_fraction(k) < 1.001_r_kind*1.0E-12_r_kind) then  !emily debug
+                   atmosphere(1)%cloud_fraction(k)=1.001_r_kind*1.0E-12_r_kind
+                 end if
+              end do
+!<<emily
            end if
         endif
      endif
@@ -2172,7 +2274,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
 !  Simulated brightness temperatures
        tsim(i)=rtsolution(i,1)%brightness_temperature
 
-!      if (present(tcc)) tcc(i)=rtsolution(i,1)%total_cloud_cover  !crtm2.3.x
+       if (present(tcc)) tcc(i)=rtsolution(i,1)%total_cloud_cover  !crtm2.3.x
 
        if (n_clouds_fwd_wk>0 .and. present(tsim_clr)) then
           if (mixed_use) then 
@@ -2523,7 +2625,8 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
 
   end subroutine calc_gfdl_reff
 
-  subroutine calc_gfdl_cloudfrac(den,pt1,qv,cloud,hs,area,cfrac)
+! subroutine calc_gfdl_cloudfrac(den,pt1,qv,cloud,hs,area,cfrac)        !orig
+  subroutine calc_gfdl_cloudfrac(den,pt1,qv,cloud,hs,area,qsat,cfrac)   !emily_qsat
 !$$$  subprogram documentation block
 !                .      .    .                                       .
 ! subprogram:    calc_gfdl_cloudfrac  calculate GFDL cloud fraction 
@@ -2566,6 +2669,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
    real(r_kind), dimension(nsig,n_clouds_fwd_wk) ,intent(in   ) :: cloud  !  hydroeteor mixing ratio
    real(r_kind),                                  intent(in   ) :: hs     !  surface elevation [ m ] 
    real(r_kind),                                  intent(in   ) :: area   !  analysis grid area [ m2 ]
+   real(r_kind), dimension(nsig)                 ,intent(in   ) :: qsat   !  saturation specific humidity  !emily_qsat
    real(r_kind), dimension(nsig)                 ,intent(inout) :: cfrac  !  cloud fraction  
 !
 ! Declare local variables
@@ -2586,6 +2690,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   real(r_kind) :: dw,dw_land,dw_ocean
   real(r_kind) :: q_sol,q_liq
   real(r_kind) :: qa
+  real(r_kind) :: phi  !emily  
   real(r_kind), dimension(nsig) :: ql,qi,qr,qs,qg
   logical :: hydrostatic
 
@@ -2618,7 +2723,9 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
 ! default area dependent form: use dx ~ 100 km as the base
 ! -----------------------------------------------------------------------
 ! higher than 10 m is considered "land" and will have higher subgrid variability
-  dw   = dw_ocean + (dw_land - dw_ocean) * min (one, abs(hs) / (ten * grav))
+  phi  = hs * grav   ! surface potential  emily_bufix   
+  dw   = dw_ocean + (dw_land - dw_ocean) * min (one, abs(phi) / (ten * grav)) !emily
+! dw   = dw_ocean + (dw_land - dw_ocean) * min (one, abs(hs) / (ten * grav))  !orig
 ! "scale - aware" subgrid variability: 100 - km as the base
   hvar = min (0.2_r_kind, max (0.01_r_kind, dw * sqrt (sqrt (area) / 100.e3_r_kind)))
 
@@ -2675,6 +2782,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
         endif
         qstar = rqi * qsi + (one - rqi) * qsw
      endif
+     qstar = qsat(k)  !emily_qsat
 
      ! -----------------------------------------------------------------------
      ! partial cloudiness by pdf:
@@ -2688,14 +2796,16 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
      ! icloud_f = 1: old fvgfs gfdl) mp implementation
      ! icloud_f = 2: binary cloud scheme (0 / 1)
      ! -----------------------------------------------------------------------
-     if (rh > 0.75_r_kind .and. qpz > 1.e-6_r_kind) then
+!    if (rh > 0.75_r_kind .and. qpz > 1.e-6_r_kind) then !orig
+     if (rh > 0.75_r_kind .and. qpz > 1.e-8_r_kind) then !emily
         dq      = hvar * qpz
         q_plus  = qpz + dq
         q_minus = qpz - dq
         if (icloud_f == 2) then
            if (qpz > qstar) then
               qa = one
-           elseif (qstar < q_plus .and. q_cond > 1.e-6_r_kind) then
+!          elseif (qstar < q_plus .and. q_cond > 1.e-6_r_kind) then !orig
+           elseif (qstar < q_plus .and. q_cond > 1.e-8_r_kind) then !emily
               qa = ((q_plus - qstar) / dq) ** 2
               qa = min (one, qa)
            else
@@ -2715,7 +2825,8 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
                  qa = zero
               endif
               ! impose minimum cloudiness if substantial q_cond exist
-              if (q_cond > 1.e-6_r_kind) then
+!             if (q_cond > 1.e-6_r_kind) then !orig
+              if (q_cond > 1.e-8_r_kind) then !emily
                  qa = max (cld_min, qa)
               endif
               qa = min (one, qa)
