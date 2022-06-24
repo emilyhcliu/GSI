@@ -279,7 +279,7 @@ contains
   use sst_retrieval, only: setup_sst_retrieval,avhrr_sst_retrieval,&
       finish_sst_retrieval,spline_cub
   use m_dtime, only: dtime_setup, dtime_check
-  use crtm_interface, only: init_crtm,call_crtm,destroy_crtm,sensorindex,surface,atmosphere &
+  use crtm_interface, only: init_crtm,call_crtm,destroy_crtm,sensorindex,surface,atmosphere, &
       itime,ilon,ilat,ilzen_ang,ilazi_ang,iscan_ang,iscan_pos,iszen_ang,isazi_ang, &
       ifrac_sea,ifrac_lnd,ifrac_ice,ifrac_sno,itsavg, &
       izz,idomsfc,isfcr,iff10,ilone,ilate,n_clouds_fwd_wk,n_absorbers, &
