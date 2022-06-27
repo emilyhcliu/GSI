@@ -1,7 +1,7 @@
 module gfsreadmod
 
 contains
-subroutine general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+subroutine general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
            icount,iflag,ilev,work,uvflag,vdflag,g_cf)  
 ! !USES:
   use kinds, only: r_kind,i_kind
@@ -22,7 +22,7 @@ subroutine general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,
   real(r_kind),dimension(grd%lat2,grd%lon2),         intent(  out) :: g_ps
   real(r_kind),dimension(grd%lat2,grd%lon2),         intent(inout) :: g_z
   real(r_kind),dimension(grd%lat2,grd%lon2,grd%nsig),intent(  out) :: g_u,g_v,&
-       g_vor,g_div,g_cwmr,g_q,g_oz,g_tv
+       g_vor,g_div,g_cwmr,g_q,g_oz,g_tv,g_delp
   real(r_kind),dimension(grd%lat2,grd%lon2,grd%nsig),intent(  out),optional :: g_cf
 
 
@@ -176,6 +176,15 @@ subroutine general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,
             do i=1,grd%lat2
                ij=ij+1
                g_cf(i,j,klev)=sub(ij,k)
+            enddo
+         enddo
+      elseif ( iflag(k) == 12 ) then
+         klev=ilev(k)
+         ij=0
+         do j=1,grd%lon2
+            do i=1,grd%lat2
+               ij=ij+1
+               g_delp(i,j,klev)=sub(ij,k)
             enddo
          enddo
       endif
@@ -413,7 +422,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
          call general_fill_ns(grd,grid,work)
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz, &
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
    endif ! if ( zflag )
@@ -438,7 +447,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
        call general_fill_ns(grd,grid,work)
    endif
    if ( icount == icm ) then
-      call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+      call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz, &
            icount,iflag,ilev,work,uvflag,vordivflag)
    endif
 
@@ -469,7 +478,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
          call general_fill_ns(grd,grid,work)
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
 
@@ -496,7 +505,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
             call general_fill_ns(grd,grid,work)
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 
@@ -521,7 +530,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
             call general_fill_ns(grd,grid,work)
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 
@@ -559,7 +568,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
             deallocate(spec_div,grid_v)
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 
@@ -593,7 +602,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
             deallocate(spec_div,grid_v)
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 
@@ -618,7 +627,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
          call general_fill_ns(grd,grid,work)
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
 
@@ -641,7 +650,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
          call general_fill_ns(grd,grid,work)
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
 
@@ -668,7 +677,7 @@ subroutine general_read_gfsatm(grd,sp_a,sp_b,filename,uvflag,vordivflag,zflag, &
          endif
       endif
       if ( icount == icm .or. k == nlevs ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
 
@@ -1111,10 +1120,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
       endif
       if ( icount == icm ) then
          if (has_cf) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
          else
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag) 
          endif
       endif
@@ -1147,10 +1156,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
    endif
    if ( icount == icm ) then
       if (has_cf) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
               icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
       else
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
               icount,iflag,ilev,work,uvflag,vordivflag) 
       endif
    endif
@@ -1191,10 +1200,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
       endif
       if ( icount == icm ) then
          if (has_cf) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
          else
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag) 
          endif
       endif
@@ -1253,10 +1262,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
          if ( icount == icm ) then
             if (has_cf) then
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
             else
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag) 
             endif
          endif
@@ -1313,10 +1322,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
          if ( icount == icm ) then
             if (has_cf) then
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
             else
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag) 
             endif
          endif
@@ -1355,10 +1364,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
          if ( icount == icm ) then
             if (has_cf) then
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
             else
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag) 
             endif
          endif
@@ -1393,10 +1402,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
          if ( icount == icm ) then
             if (has_cf) then
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
             else
-               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+               call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag) 
             endif
          endif
@@ -1428,10 +1437,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
       endif
       if ( icount == icm ) then
          if (has_cf) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag,g_cf)  
          else
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag)  
          endif
       endif
@@ -1461,10 +1470,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
       endif
       if ( icount == icm ) then
          if (has_cf) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag,g_cf)  
          else
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag)  
          endif
       endif
@@ -1512,10 +1521,10 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
     ! if ( icount == icm .or. k == nlevs ) then 
       if ( icount == icm  .or. ( (.not. has_cf) .and. k==nlevs) ) then  
          if (has_cf) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag,g_cf)  
          else
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                  icount,iflag,ilev,work,uvflag,vordivflag) 
          endif
       endif
@@ -1545,7 +1554,7 @@ subroutine general_read_gfsatm_nems(grd,sp_a,filename,uvflag,vordivflag,zflag, &
             endif
          endif
          if ( icount == icm .or. k==nlevs ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_oz,&
                     icount,iflag,ilev,work,uvflag,vordivflag,g_cf) 
          endif
       endif
@@ -1689,7 +1698,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
    real(r_kind),pointer,dimension(:,:,:)     :: ptr3d
    real(r_kind),pointer,dimension(:,:)       :: g_ps
    real(r_kind),pointer,dimension(:,:,:)     :: g_vor,g_div,&
-                                                g_cwmr,g_q,g_oz,g_tv
+                                                g_cwmr,g_q,g_oz,g_tv,g_delp
 
    real(r_kind),allocatable,dimension(:,:)   :: g_z
    real(r_kind),allocatable,dimension(:,:,:) :: g_u,g_v
@@ -1895,6 +1904,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
    call gsi_bundlegetpointer(gfs_bundle,'q' ,g_q   ,ier);istatus=istatus+ier
    call gsi_bundlegetpointer(gfs_bundle,'oz',g_oz  ,ier);istatus=istatus+ier
    call gsi_bundlegetpointer(gfs_bundle,'cw',g_cwmr,ier);istatus=istatus+ier
+   call gsi_bundlegetpointer(gfs_bundle,'delp',g_delp,ier);istatus=istatus+ier
    if ( istatus /= 0 ) then
       if ( mype == 0 ) then
          write(6,*) 'general_read_gfsatm_nems: ERROR'
@@ -1940,7 +1950,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
    endif
@@ -1970,7 +1980,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
       endif
    endif
    if ( icount == icm ) then
-      call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
            icount,iflag,ilev,work,uvflag,vordivflag)
    endif
 
@@ -2007,7 +2017,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
    end do
@@ -2064,7 +2074,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
             deallocate(grid_vor)
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 
@@ -2121,7 +2131,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
             deallocate(grid_div)
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 
@@ -2156,7 +2166,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
             endif
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 
@@ -2187,7 +2197,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
             endif
          endif
          if ( icount == icm ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
       end do
@@ -2217,10 +2227,42 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
    end do
+   ! read in dpres
+   do k=1,nlevs
+      kr = levs+1-k ! netcdf is top to bottom, need to flip
+   
+      icount=icount+1
+      iflag(icount)=12
+      ilev(icount)=k
+
+      if (mype==mype_use(icount)) then
+         call read_vardata(atmges, 'dpres', rwork3d0, nslice=kr, slicedim=3)
+         ! layer pressure change
+         if ( diff_res ) then
+            grid_b=rwork3d0(:,:,1)
+            vector(1)=.false.
+            call fill2_ns(grid_b,grid_c(:,:,1),latb+2,lonb)
+            call g_egrid2agrid(p_high,grid_c,grid2,1,1,vector)
+            do kk=1,grd%itotsub
+               i=grd%ltosi_s(kk)
+               j=grd%ltosj_s(kk)
+               work(kk)=grid2(i,j,1)
+            enddo
+         else
+            grid=rwork3d0(:,:,1)
+            call general_fill_ns(grd,grid,work)
+         endif
+      endif
+      if ( icount == icm ) then
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
+              icount,iflag,ilev,work,uvflag,vordivflag)
+      endif
+   end do
+
    do k=1,nlevs
       kr = levs+1-k ! netcdf is top to bottom, need to flip
    
@@ -2247,7 +2289,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
       endif
       if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
    end do
@@ -2281,7 +2323,7 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
       endif
 
          if ( icount == icm .or. k == nlevs ) then
-            call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr, &
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
                  icount,iflag,ilev,work,uvflag,vordivflag)
          endif
 

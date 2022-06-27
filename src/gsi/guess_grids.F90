@@ -1091,8 +1091,9 @@ contains
     real(r_kind) kap1,kapr,trk
     real(r_kind),dimension(:,:)  ,pointer::ges_ps=>NULL()
     real(r_kind),dimension(:,:,:),pointer::ges_tv=>NULL()
+    real(r_kind),dimension(:,:,:),pointer::ges_delp=>NULL()
     real(r_kind) pinc(lat2,lon2)
-    integer(i_kind) i,j,k,ii,jj,itv,ips,kp
+    integer(i_kind) i,j,k,ii,jj,itv,ips,kp,idelp
     logical ihaveprs(nfldsig)
 
     kap1=rd_over_cp+one
@@ -1102,6 +1103,8 @@ contains
     do jj=1,nfldsig
        call gsi_bundlegetpointer(gsi_metguess_bundle(jj),'ps' ,ges_ps,ips)
        if(ips/=0) call die(myname_,': ps not available in guess, abort',ips)
+       call gsi_bundlegetpointer(gsi_metguess_bundle(jj),'delp' ,ges_delp, idelp)
+       if(idelp/=0) call die(myname_,': delp not available in guess, abort', idelp)
        call gsi_bundlegetpointer(gsi_metguess_bundle(jj),'tv' ,ges_tv,itv)
        if(idvc5==3) then
           if(itv/=0) call die(myname_,': tv must be present when idvc5=3, abort',itv)
@@ -1141,7 +1144,14 @@ contains
                                                     eta2_ll(k) + pt_ll)
                 else
                    if (idvc5==1 .or. idvc5==2) then
-                      ges_prsi(i,j,k,jj)=ak5(k)+(bk5(k)*ges_ps(i,j))
+                      ! below is old GSI way of getting ges_prsi
+                      !ges_prsi(i,j,k,jj)=ak5(k)+(bk5(k)*ges_ps(i,j))
+                      ! compute prsi from delp
+                      if (k==nsig+1) then
+                          ges_prsi(i,j,k,jj)=zero
+                      else
+                          ges_prsi(i,j,k,jj)=sum(ges_delp(i,j,k:nsig))
+                      endif
                    else if (idvc5==3) then
                       if (k==1) then
                          ges_prsi(i,j,k,jj)=ges_ps(i,j)
