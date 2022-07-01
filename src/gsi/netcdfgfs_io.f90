@@ -147,6 +147,7 @@ contains
     real(r_kind),pointer,dimension(:,:,:):: ges_cwmr_it=>NULL()
     real(r_kind),pointer,dimension(:,:,:):: ges_ql_it  => NULL()
     real(r_kind),pointer,dimension(:,:,:):: ges_qi_it  => NULL()
+    real(r_kind),pointer,dimension(:,:,:):: ges_delp_it  => NULL()
 
     type(sub2grid_info) :: grd_t
     logical regional
@@ -166,7 +167,7 @@ contains
 
     regional=.false.
     inner_vars=1
-    num_fields=min(8*grd_a%nsig+2,npe)
+    num_fields=min(n3d*grd_a%nsig+n2d,npe)
 !  Create temporary communication information fore read routines
     call general_sub2grid_create_info(grd_t,inner_vars,grd_a%nlat,grd_a%nlon, &
           grd_a%nsig,num_fields,regional)
@@ -257,6 +258,11 @@ contains
     if (istatus==0) then
        call gsi_bundlegetpointer (gsi_metguess_bundle(it),'oz',ges_oz_it ,istatus)
        if(istatus==0) ges_oz_it = ptr3d
+    endif
+    call gsi_bundlegetpointer (atm_bundle,'delp',ptr3d,istatus)
+    if (istatus==0) then
+       call gsi_bundlegetpointer (gsi_metguess_bundle(it),'delp',ges_delp_it ,istatus)
+       if(istatus==0) ges_delp_it = ptr3d
     endif
     call gsi_bundlegetpointer (atm_bundle,'cw',ptr3d,istatus)
     if (istatus==0) then

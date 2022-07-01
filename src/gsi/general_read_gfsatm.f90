@@ -2231,37 +2231,6 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
               icount,iflag,ilev,work,uvflag,vordivflag)
       endif
    end do
-   ! read in dpres
-   do k=1,nlevs
-      kr = levs+1-k ! netcdf is top to bottom, need to flip
-   
-      icount=icount+1
-      iflag(icount)=12
-      ilev(icount)=k
-
-      if (mype==mype_use(icount)) then
-         call read_vardata(atmges, 'dpres', rwork3d0, nslice=kr, slicedim=3)
-         ! layer pressure change
-         if ( diff_res ) then
-            grid_b=rwork3d0(:,:,1)
-            vector(1)=.false.
-            call fill2_ns(grid_b,grid_c(:,:,1),latb+2,lonb)
-            call g_egrid2agrid(p_high,grid_c,grid2,1,1,vector)
-            do kk=1,grd%itotsub
-               i=grd%ltosi_s(kk)
-               j=grd%ltosj_s(kk)
-               work(kk)=grid2(i,j,1)
-            enddo
-         else
-            grid=rwork3d0(:,:,1)
-            call general_fill_ns(grd,grid,work)
-         endif
-      endif
-      if ( icount == icm ) then
-         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
-              icount,iflag,ilev,work,uvflag,vordivflag)
-      endif
-   end do
 
    do k=1,nlevs
       kr = levs+1-k ! netcdf is top to bottom, need to flip
@@ -2328,6 +2297,39 @@ subroutine general_read_gfsatm_nc(grd,sp_a,filename,uvflag,vordivflag,zflag, &
          endif
 
    enddo ! do k=1,nlevs
+
+   ! read in dpres
+   do k=1,nlevs
+      kr = levs+1-k ! netcdf is top to bottom, need to flip
+   
+      icount=icount+1
+      iflag(icount)=12
+      ilev(icount)=k
+
+      if (mype==mype_use(icount)) then
+         call read_vardata(atmges, 'dpres', rwork3d0, nslice=kr, slicedim=3)
+         rwork3d0 = r0_001*rwork3d0 ! convert Pa to cb
+         ! layer pressure change
+         if ( diff_res ) then
+            grid_b=rwork3d0(:,:,1)
+            vector(1)=.false.
+            call fill2_ns(grid_b,grid_c(:,:,1),latb+2,lonb)
+            call g_egrid2agrid(p_high,grid_c,grid2,1,1,vector)
+            do kk=1,grd%itotsub
+               i=grd%ltosi_s(kk)
+               j=grd%ltosj_s(kk)
+               work(kk)=grid2(i,j,1)
+            enddo
+         else
+            grid=rwork3d0(:,:,1)
+            call general_fill_ns(grd,grid,work)
+         endif
+      endif
+      if ( icount == icm .or. k == nlevs) then
+         call general_reload(grd,g_z,g_ps,g_tv,g_vor,g_div,g_u,g_v,g_q,g_oz,g_cwmr,g_delp, &
+              icount,iflag,ilev,work,uvflag,vordivflag)
+      endif
+   end do
 
    if ( procuse ) then
       if ( diff_res) deallocate(grid_b,grid_b2,grid_c,grid_c2,grid2)

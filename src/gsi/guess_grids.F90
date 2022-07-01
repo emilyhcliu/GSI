@@ -1148,7 +1148,7 @@ contains
                       !ges_prsi(i,j,k,jj)=ak5(k)+(bk5(k)*ges_ps(i,j))
                       ! compute prsi from delp
                       if (k==nsig+1) then
-                          ges_prsi(i,j,k,jj)=zero
+                          ges_prsi(i,j,k,jj)=0.0001_r_kind
                       else
                           ges_prsi(i,j,k,jj)=sum(ges_delp(i,j,k:nsig))
                       endif
