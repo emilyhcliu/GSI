@@ -1938,6 +1938,14 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     call nc_diag_metadata("surface_air_pressure", sngl(psges2*r1000) )
     call nc_diag_metadata("Land_Type_Index", sngl(isli))
     ! END GEOVALS
+    ! extra fields for AMV QC
+    call nc_diag_metadata("wind_computation_method", sngl(data(28,i)))
+    call nc_diag_metadata("satellite_zenith_angle", sngl(data(29,i)))
+    call nc_diag_metadata("satellite_identifier", sngl(data(30,i)))
+    call nc_diag_metadata("data_provider_origin", sngl(data(31,i)))
+    call nc_diag_metadata("generating_application", sngl(data(32,i)))
+    call nc_diag_metadata("percent_confidence", sngl(data(33,i)))
+    ! end extra AMV QC fields
 
   end subroutine contents_netcdf_diag_
 
