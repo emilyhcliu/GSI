@@ -1591,9 +1591,9 @@ subroutine read_satwnd(nread,ndata,nodata,infile,obstype,lunout,gstime,twind,sis
            cdata_all(28,iout)=hdrdat(9)           ! wind computation method
            cdata_all(29,iout)=hdrdat(10)          ! satellite zenith angle
            cdata_all(30,iout)=hdrdat(1)           ! satellite identifier
-           cdata_all(31,iout)=qcdat(1)            ! data provider origin
-           cdata_all(32,iout)=qcdat(2)            ! generating applicattion
-           cdata_all(33,iout)=qcdat(3)            ! percent confidence
+           cdata_all(31,iout)=qifn                ! QI without forecast
+           cdata_all(32,iout)=qify                ! QI with forecast
+           cdata_all(33,iout)=ee                  ! expected error
 
            if(perturb_obs)then
               cdata_all(34,iout)=ran01dom()*perturb_fact ! u perturbation
