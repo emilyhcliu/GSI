@@ -271,7 +271,7 @@ subroutine read_satwnd(nread,ndata,nodata,infile,obstype,lunout,gstime,twind,sis
 ! Set lower limits for observation errors
   werrmin=one
   nsattype=0
-  nreal=33
+  nreal=34
   if(perturb_obs ) nreal=nreal+2
   ntread=1
   ntmatch=0
@@ -1594,10 +1594,11 @@ subroutine read_satwnd(nread,ndata,nodata,infile,obstype,lunout,gstime,twind,sis
            cdata_all(31,iout)=qifn                ! QI without forecast
            cdata_all(32,iout)=qify                ! QI with forecast
            cdata_all(33,iout)=ee                  ! expected error
+           cdata_all(34,iout)=pct1
 
            if(perturb_obs)then
-              cdata_all(34,iout)=ran01dom()*perturb_fact ! u perturbation
-              cdata_all(35,iout)=ran01dom()*perturb_fact ! v perturbation
+              cdata_all(35,iout)=ran01dom()*perturb_fact ! u perturbation
+              cdata_all(36,iout)=ran01dom()*perturb_fact ! v perturbation
            endif
 
         enddo  loop_readsb

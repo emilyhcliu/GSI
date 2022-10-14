@@ -1945,6 +1945,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     call nc_diag_metadata("QI_without_forecast_info", sngl(data(31,i)))
     call nc_diag_metadata("QI_with_forecast_info", sngl(data(32,i)))
     call nc_diag_metadata("expected_error", sngl(data(33,i)))
+    call nc_diag_metadata("coefficient_of_variation", sngl(data(34,i)))
     ! end extra AMV QC fields
 
   end subroutine contents_netcdf_diag_

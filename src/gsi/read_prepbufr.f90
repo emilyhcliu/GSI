@@ -475,7 +475,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   if(tob)then
      nreal=25
   else if(uvob) then 
-     nreal=33
+     nreal=34
   else if(spdob) then
      nreal=24
   else if(psob) then
