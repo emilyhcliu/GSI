@@ -191,7 +191,7 @@ module qcmod
   public :: ifail_iland_det, ifail_isnow_det, ifail_iice_det, ifail_iwater_det,&
             ifail_imix_det, ifail_iomg_det, ifail_isst_det, ifail_itopo_det,&
             ifail_iwndspeed_det
-  public :: cao_check 
+  public :: cao_check,ifail_clrfrac_geocsr_qc
   public :: buddycheck_t,buddydiag_save
   public :: vadwnd_l2rw_qc
   public :: pvis,pcldch,scale_cv,estvisoe,estcldchoe,vis_thres,cldch_thres
@@ -352,6 +352,7 @@ module qcmod
 ! QC_geocsr       
 ! Reject because of standard deviation in subroutine qc_geocsr
   integer(i_kind),parameter:: ifail_std_geocsr_qc=50
+  integer(i_kind),parameter:: ifail_clrfrac_geocsr_qc=51
 
 ! QC_avhrr          
 !  Reject because of too large surface temperature physical retrieval in qc routine: tz_retrieval (see tzr_qc)

@@ -288,7 +288,7 @@ contains
   use crtm_interface, only: ilzen_ang2,iscan_ang2,iszen_ang2,isazi_ang2
   use clw_mod, only: calc_clw, ret_amsua, gmi_37pol_diff
   use qcmod, only: igood_qc,ifail_gross_qc,ifail_interchan_qc,ifail_crtm_qc,ifail_satinfo_qc,qc_noirjaco3,ifail_cloud_qc
-  use qcmod, only: ifail_cao_qc,cao_check  
+  use qcmod, only: ifail_cao_qc,cao_check,ifail_clrfrac_geocsr_qc  
   use qcmod, only: ifail_iland_det, ifail_isnow_det, ifail_iice_det, ifail_iwater_det, ifail_imix_det, &
                    ifail_iomg_det, ifail_isst_det, ifail_itopo_det,ifail_iwndspeed_det
   use qcmod, only: qc_gmi,qc_saphir,qc_amsr2
@@ -384,6 +384,7 @@ contains
   real(r_kind),dimension(nchanl):: varinv0
   real(r_kind),dimension(nchanl):: varinv,varinv_use,error0,errf,errf0
   real(r_kind),dimension(nchanl):: tb_obs,tbc,tbcnob,tlapchn,tb_obs_sdv
+  real(r_kind),dimension(nchanl):: totbc
   real(r_kind),dimension(nchanl):: tnoise,tnoise_cld
   real(r_kind),dimension(nchanl):: emissivity,ts,emissivity_k
   real(r_kind),dimension(nchanl):: tsim,wavenumber,tsim_bc
@@ -1069,6 +1070,7 @@ contains
            endif
         endif
 
+        totbc=zero
         predbias=zero
         cld_rbc_idx2=zero
         do i=1,nchanl
@@ -1188,9 +1190,11 @@ contains
  
            do j=1, npred-angord
               tbc(i)=tbc(i) - predbias(j,i) !obs-ges with bias correction
+              totbc(i) = totbc(i) + predbias(j,i)
            end do
            tbc(i)=tbc(i) - predbias(npred+1,i)
            tbc(i)=tbc(i) - predbias(npred+2,i)
+           totbc(i) = totbc(i) + predbias(npred+1,i)+predbias(npred+2,i)
 
 !          Calculate cloud effect for QC
            if (radmod%cld_effect .and. eff_area) then
@@ -1462,9 +1466,11 @@ contains
                  if((abi .or. ahi) .and. i/=2 .and. i/=3) then
                     varinv(i)=zero
                     varinv_use(i)=zero
+                    id_qc(i) = ifail_clrfrac_geocsr_qc
                  end if
                  if(seviri .and. i/=2) then
                     varinv(i)=zero
+                    id_qc(i) = ifail_clrfrac_geocsr_qc
                  end if
               end do
            end if
@@ -2578,11 +2584,15 @@ contains
                  call nc_diag_metadata("SST_Cool_layer_tdrop",     sngl(data_s(idtc,n))              )       ! dt_cool at zob
                  call nc_diag_metadata("SST_dTz_dTfound",          sngl(data_s(itz_tr,n))            )       ! d(Tz)/d(Tr)
 
-                 call nc_diag_metadata("Observation",                           sngl(tb_obs0(ich_diag(i)))  )     ! observed brightness temperature (K)
-                 call nc_diag_metadata("Obs_Minus_Forecast_unadjusted",         sngl(tbcnob(ich_diag(i)))  )     ! observed - simulated Tb with no bias correction (K)
-                 call nc_diag_metadata("Obs_Minus_Forecast_adjusted",           sngl(tbc0(ich_diag(i)  ))  )     ! observed - simulated Tb with bias corrrection (K)
+                 call nc_diag_metadata("Observation",                           sngl(tb_obs0(ich_diag(i))) ) ! observed brightness temperature (K)
+                 call nc_diag_metadata("Obs_Minus_Forecast_unadjusted",         sngl(tbcnob(ich_diag(i)))  ) ! observed - simulated Tb with no bias correction (K)
+                 call nc_diag_metadata("Obs_Minus_Forecast_adjusted",           sngl(tbc0(ich_diag(i)  ))  ) ! observed - simulated Tb with bias corrrection (K)
+                 call nc_diag_metadata("Forecast_unadjusted",                   sngl(tsim(ich_diag(i)  ))  ) ! simulated Tb without bias corrrection (K)
+                 call nc_diag_metadata("Forecast_adjusted",                     sngl(tsim(ich_diag(i)  ) &
+                                                                               + totbc(ich_diag(i)     ))  ) ! simulated Tb with bias corrrection (K)
                  errinv = sqrt(varinv0(ich_diag(i)))
                  call nc_diag_metadata("Inverse_Observation_Error",             sngl(errinv)          )
+                 call nc_diag_metadata("Input_Observation_Error",               sngl(error0(ich_diag(i))) )  ! Origial error assignment
                  if (save_jacobian .and. allocated(idnames)) then
                  call nc_diag_metadata("Observation_scaled",                    sngl(tb_obs(ich_diag(i)))  )     ! observed brightness temperature (K) scaled by R^{-1/2}
                  call nc_diag_metadata("Obs_Minus_Forecast_adjusted_scaled",    sngl(tbc(ich_diag(i)  ))  )     ! observed - simulated Tb with bias corrrection (K) scaled by R^{-1/2}
