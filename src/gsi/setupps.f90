@@ -305,26 +305,26 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   hr_offset=min_offset/60.0_r_kind
 !  Check for duplicate observations at same location
   dup=one
-  do k=1,nobs
-     do l=k+1,nobs
-        if(data(ilat,k) == data(ilat,l) .and. &
-           data(ilon,k) == data(ilon,l) .and. &
-           data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
-           muse(k) .and. muse(l))then
-           if(l_closeobs) then
-              if(abs(data(itime,k)-hr_offset)<abs(data(itime,l)-hr_offset)) then
-                  muse(l)=.false.
-              else
-                  muse(k)=.false.
-              endif
-           else
-              tfact=min(one,abs(data(itime,k)-data(itime,l))/dfact1)
-              dup(k)=dup(k)+one-tfact*tfact*(one-dfact)
-              dup(l)=dup(l)+one-tfact*tfact*(one-dfact)
-           endif
-        end if
-     end do
-  end do
+!  do k=1,nobs
+!     do l=k+1,nobs
+!        if(data(ilat,k) == data(ilat,l) .and. &
+!           data(ilon,k) == data(ilon,l) .and. &
+!           data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
+!           muse(k) .and. muse(l))then
+!           if(l_closeobs) then
+!              if(abs(data(itime,k)-hr_offset)<abs(data(itime,l)-hr_offset)) then
+!                  muse(l)=.false.
+!              else
+!                  muse(k)=.false.
+!              endif
+!           else
+!              tfact=min(one,abs(data(itime,k)-data(itime,l))/dfact1)
+!              dup(k)=dup(k)+one-tfact*tfact*(one-dfact)
+!              dup(l)=dup(l)+one-tfact*tfact*(one-dfact)
+!           endif
+!        end if
+!     end do
+!  end do
 
 
 ! If requested, save select data for output to diagnostic file
