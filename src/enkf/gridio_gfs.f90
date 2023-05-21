@@ -3979,9 +3979,6 @@
                                     ! old logical massbal_adjust, if non-zero
   use_full_hydro = ( ql_ind > 0 .and. qi_ind > 0 .and. &
                      qr_ind > 0 .and. qs_ind > 0 .and. qg_ind > 0 )
-  ! Currently, we do not let precipiation to affect the enkf analysis  
-  ! The following line will be removed after testing
-! use_full_hydro = .false.   !emily
 
   dsfg = open_dataset(filenamein, paropen=.true., mpicomm=iocomms(mem_pe(nproc)))
   call read_attribute(dsfg, 'ak', values_1d,errcode=iret)
@@ -4213,12 +4210,12 @@
   allocate(q2(nlons,nlats,nccount(3)),qanl2(nlons,nlats,nccount(3)))
   call read_vardata(dsfg, 'clwmr', q, ncstart=ncstart, nccount=nccount, errcode=iret)
   if (iret /= 0) then
-     print *,'error reading clwmr'
+     write(6,*)'WRITEINCREMENT_PNC:  ***FATAL ERROR*** reading clwmr, iret= ',iret,' PROGRAM STOPS'
      call stop2(29)
   endif
   call read_vardata(dsfg, 'icmr', q2, ncstart=ncstart, nccount=nccount, errcode=iret)
   if (iret /= 0) then
-     print *,'error reading icmr'
+     write(6,*)'WRITEINCREMENT_PNC:  ***FATAL ERROR*** reading icmr, iret= ',iret,' PROGRAM STOPS'
      call stop2(29)
   endif
   do k=lev_pe1(iope), lev_pe2(iope)
@@ -4274,7 +4271,7 @@
   ! rwmr increment
   call read_vardata(dsfg, 'rwmr', q, ncstart=ncstart, nccount=nccount, errcode=iret)
   if (iret /= 0) then
-     print *,'error reading rwmr'
+     write(6,*)'WRITEINCREMENT_PNC:  ***FATAL ERROR*** reading rwmr, iret= ',iret,' PROGRAM STOPS'
      call stop2(29)
   endif
   do k=lev_pe1(iope), lev_pe2(iope)
@@ -4299,7 +4296,7 @@
   ! snmr increment
   call read_vardata(dsfg, 'snmr', q, ncstart=ncstart, nccount=nccount, errcode=iret)
   if (iret /= 0) then
-     print *,'error reading snmr'
+     write(6,*)'WRITEINCREMENT_PNC:  ***FATAL ERROR*** reading snmr, iret= ',iret,' PROGRAM STOPS'
      call stop2(29)
   endif
   do k=lev_pe1(iope), lev_pe2(iope)
@@ -4324,7 +4321,7 @@
   ! grle increment
   call read_vardata(dsfg, 'grle', q, ncstart=ncstart, nccount=nccount, errcode=iret)
   if (iret /= 0) then
-     print *,'error reading grle'
+     write(6,*)'WRITEINCREMENT_PNC:  ***FATAL ERROR*** reading grle, iret= ',iret,' PROGRAM STOPS'
      call stop2(29)
   endif
   do k=lev_pe1(iope), lev_pe2(iope)
