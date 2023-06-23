@@ -218,7 +218,7 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
   integer(i_kind) k1,k2,k,j,nz,jc,idia,irdim1,istatus,ioff0
   integer(i_kind) ioff,itoss,ikeep,ierror_toq,ierror_poq
   integer(i_kind) isolz,ifovn,itoqf
-  integer(i_kind) mm1,itime,ilat,ilon,ilate,ilone,itoq,ipoq
+  integer(i_kind) mm1,itime,ilat,ilon,ilate,ilone,itoq,ipoq,iafbo !emily
   integer(i_kind),dimension(iint,nobs):: idiagbuf
   integer(i_kind),dimension(nlevs):: ipos,iouse,ikeepk
 
@@ -253,6 +253,9 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
   call init_vars_
 
   mm1=mype+1
+
+  write(6,*)'emily checking: you are here ...', myname, obstype
+
 !
 !*********************************************************************************
 ! Initialize arrays
@@ -346,7 +349,7 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
   isolz=8     ! index of solar zenith angle   (gome and omi only)
   itoqf=9     ! index of row anomaly           (omi only)
   ifovn=14    ! index of scan position (gome and omi only)
-
+  iafbo=15    ! index of algorithm flag for best ozone (for omi, ompsnm, and ompstc8)  !emily
 
 ! If requested, save data for diagnostic ouput
   if(ozone_diagsave)ii=0
@@ -623,6 +626,11 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
                  else
                     call nc_diag_metadata("Row_Anomaly_Index",         sngl(rmiss)  )
                  endif
+!>>emily
+                 if (obstype == 'omi' .or. obstype == 'ompstc8' .or. obstype == 'ompsnm') then
+                    call nc_diag_metadata("Algorithm_Flag_For_Best_Ozone", sngl(data(iafbo,i)))
+                 endif 
+!<<emily
                  if (save_jacobian) then
                    call nc_diag_data2d("Observation_Operator_Jacobian_stind", dhx_dx%st_ind)
                    call nc_diag_data2d("Observation_Operator_Jacobian_endind", dhx_dx%end_ind)
@@ -1187,6 +1195,7 @@ subroutine setupozlev(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
 
   mm1=mype+1
 
+  write(6,*)'emily checking: you are here ...', myname, obstype
 
 !
 !*********************************************************************************
