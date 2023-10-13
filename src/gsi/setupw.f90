@@ -221,7 +221,6 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 !                              level; they are now loaded by
 !                              aircraftinfo.
 !   2020-05-04  wu   - no rotate_wind for fv3_regional
-!   2021-07-25 Genkova  - write AMVQ in diagnostic files 
 !   2021-10-xx  pondeca/morris/zhao - added observation provider/subprovider
 !                         information in diagonostic file, which is used
 !                         in offline observation quality control program (AutoObsQC) 
@@ -284,6 +283,8 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   real(r_kind),dimension(nsig):: prsltmp2
   real(r_kind),dimension(nsig+1):: prsitmp
   real(r_kind),dimension(nsig):: ttmp,qtmp,utmp,vtmp,hsges
+  real(r_kind),dimension(nsig):: ttmp_reverse,qtmp_reverse,utmp_reverse,vtmp_reverse,hsges_reverse, prsltmp2_reverse !emily
+  real(r_kind),dimension(nsig+1):: prsitmp_reverse !emily
   real(r_kind) psges2
 
   integer(i_kind) i,nchar,nreal,k,j,l,ii,itype,ijb
@@ -300,6 +301,8 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   integer(i_kind) izz,iprvd,isprvd
   integer(i_kind) idomsfc,isfcr,iskint,iff10
   integer(i_kind) ibb,ikk,ihil,idddd,iamvq
+  integer(i_kind) kk !emily
+  integer(i_kind) water_frac,land_frac,ice_frac !emily
 
   integer(i_kind) num_bad_ikx,iprev_station
 
@@ -391,9 +394,8 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   icat=24     ! index of data level category
   ijb=25      ! index of non linear qc parameter
   ihil=26     ! index of  hilbert curve weight
-  iamvq=27    ! index of AMVQ
-  iptrbu=28   ! index of u perturbation
-  iptrbv=29   ! index of v perturbation
+  iptrbu=27   ! index of u perturbation
+  iptrbv=28   ! index of v perturbation
 
   mm1=mype+1
   scale=one
@@ -409,7 +411,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   if(conv_diagsave)then
      ii=0
      nchar=1
-     ioff0=26
+     ioff0=25
      nreal=ioff0
      if (lobsdiagsave) nreal=nreal+7*miter+2
      if (twodvar_regional .or. l_obsprvdiag) then
@@ -632,6 +634,10 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 
      sfc_data = (itype >=280 .and. itype < 300)
      if (z_height .or. sfc_data) then
+        write(6,*)'emily setupw: you are here 1 ...'
+        write(6,*)'emily setupw: itype    = ', itype 
+        write(6,*)'emily setupw: sfc_data = ', sfc_data
+        write(6,*)'emily setupw: sfcmod_gfs, sfcmod_mm5 = ', sfcmod_gfs, sfcmod_mm5 
 
         drpx = zero
         dpres = data(ihgt,i)
@@ -650,6 +656,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
         end if
         dpres=dpres-(dstn+fact*(zsges-dstn))
         if(itype==261) dpres = data(ihgt,i)
+        write(6,*)'emily setupw: dpres = ', dpres 
 
 !       Get guess surface elevation and geopotential height profile 
 !       at observation location.
@@ -738,8 +745,10 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 
         if (zob <= zero .and. twodvar_regional) zob=ten !trap for stations with negative zob
 
+        if (itype == 290) write(6,*)'emily setupw zob zges(1) = ', zob, zges(1)
         if (zob > zges(1)) then
            factw=one
+           if (itype == 290) write(6,*)'emily setupw factw (final-1a) = ', factw
         else
            factw = data(iff10,i)
            if(sfcmod_gfs .or. sfcmod_mm5) then
@@ -747,6 +756,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
               skint = data(iskint,i)
               call comp_fact10(dlat,dlon,dtime,skint,sfcr,isli,mype,factw)
            end if
+           if (itype == 290) write(6,*)'emily setupw factw (final-1b) = ', factw
 
            if (zob <= ten) then
               if(zob < ten)then
@@ -767,10 +777,13 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
            else
               term = (zges(1)-zob)/(zges(1)-ten)
               factw = one-term+factw*term
+              if (itype == 290) write(6,*)'emily setupw factw (final-1c) = ', factw
            end if
 
            ugesin=factw*ugesin
            vgesin=factw*vgesin
+
+           if (itype == 290) write(6,*)'emily setupw factw (final  ) = ', factw
 
            if (save_jacobian) then
               dhx_dx_u%val = factw * dhx_dx_u%val
@@ -816,6 +829,9 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 
 !    Process observations with reported pressure
      else
+
+        write(6,*)'emily setupw you are here 2 ...'
+
         dpres = data(ipres,i)
         presw = ten*exp(dpres)
         dpres = dpres-log(psges)
@@ -1278,7 +1294,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
         call vqc_setup(vals,ratio_errors,error,cvar,&
                       cg_t,ibb,ikk,var_jb,rat_err2v,wgt,valqcv)
         rwgt = rwgt+0.5_r_kind*wgt/wgtlim
-        valqc=valqcu+valqcv
+        valqc=half*(valqcu+valqcv)
 
 !       Accumulate statistics for obs belonging to this task
         if (muse(i)) then
@@ -1767,7 +1783,6 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
         rdiagbuf(23,ii) = factw            ! 10m wind reduction factor
         rdiagbuf(24,ii) = 1.e+10_r_single  ! u spread (filled in by EnKF)
         rdiagbuf(25,ii) = 1.e+10_r_single  ! v spread (filled in by EnKF)
-        rdiagbuf(26,ii) = data(iamvq,i)    ! AMVQ mitigation flag for AMVs;only for GOES17,LHP issue 
 
         ioff=ioff0
         if (lobsdiagsave) then
@@ -1854,8 +1869,6 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
            call nc_diag_metadata("Errinv_Input",            sngl(errinv_input)     )
            call nc_diag_metadata("Errinv_Adjust",           sngl(errinv_adjst)     )
            call nc_diag_metadata("Errinv_Final",            sngl(errinv_final)     )
-           ! AMVQ Mitigated winds                                                  
-           call nc_diag_metadata("Mitigation_flag_AMVQ",    sngl(data(iamvq,i))    ) 
            call nc_diag_metadata("Wind_Reduction_Factor_at_10m", sngl(factw)       )
 
            if (.not. regional .or. fv3_regional) then
@@ -1879,14 +1892,10 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
               call nc_diag_metadata("u_Observation",                              sngl(uob_e)           )
               call nc_diag_metadata("u_Obs_Minus_Forecast_adjusted",              sngl(dudiff_e)        )
               call nc_diag_metadata("u_Obs_Minus_Forecast_unadjusted",            sngl(uob_e-uges_e)    )
-              call nc_diag_metadata("u_Forecast_adjusted",                        sngl(uob_e-dudiff_e))
-              call nc_diag_metadata("u_Forecast_unadjusted",                      sngl(uges_e))
 
               call nc_diag_metadata("v_Observation",                              sngl(vob_e)           )
               call nc_diag_metadata("v_Obs_Minus_Forecast_adjusted",              sngl(dvdiff_e)        )
               call nc_diag_metadata("v_Obs_Minus_Forecast_unadjusted",            sngl(vob_e-vges_e)    )
-              call nc_diag_metadata("v_Forecast_adjusted",                        sngl(vob_e-dvdiff_e))
-              call nc_diag_metadata("v_Forecast_unadjusted",                      sngl(vges_e))
            endif
 
            if (lobsdiagsave) then
@@ -1927,16 +1936,58 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
            endif
 
     ! GEOVALS
-    call nc_diag_data2d("atmosphere_pressure_coordinate", sngl(prsltmp2*r1000))
-    call nc_diag_data2d("atmosphere_pressure_coordinate_interface", sngl(prsitmp*r1000))
-    call nc_diag_data2d("air_temperature", sngl(ttmp))
-    call nc_diag_data2d("specific_humidity", sngl(qtmp))
-    call nc_diag_data2d("eastward_wind", sngl(utmp))
-    call nc_diag_data2d("northward_wind", sngl(vtmp))
-    call nc_diag_data2d("geopotential_height", sngl(hsges) )
+
+    !>>emily
+    do k = 1, nsig
+       kk  = nsig-k+1
+       utmp_reverse(kk)     = utmp(k)
+       vtmp_reverse(kk)     = vtmp(k)
+       ttmp_reverse(kk)     = ttmp(k)
+       qtmp_reverse(kk)     = qtmp(k)
+       hsges_reverse(kk)    = hsges(k)
+       prsltmp2_reverse(kk) = prsltmp2(k)
+    enddo
+    do k = 1, nsig+1
+       kk  = (nsig+1)-k+1
+       prsitmp_reverse(kk)  = prsitmp(k)
+    enddo
+    call nc_diag_data2d("atmosphere_pressure_coordinate", sngl(prsltmp2_reverse*r1000))
+    call nc_diag_data2d("atmosphere_pressure_coordinate_interface", sngl(prsitmp_reverse*r1000))
+    call nc_diag_data2d("air_temperature", sngl(ttmp_reverse))
+    call nc_diag_data2d("specific_humidity", sngl(qtmp_reverse))
+    call nc_diag_data2d("eastward_wind", sngl(utmp_reverse))
+    call nc_diag_data2d("northward_wind", sngl(vtmp_reverse))
+    call nc_diag_data2d("geopotential_height", sngl(hsges_reverse) )
+    !<<emily
+
+!>>orig
+!   call nc_diag_data2d("atmosphere_pressure_coordinate", sngl(prsltmp2*r1000))
+!   call nc_diag_data2d("atmosphere_pressure_coordinate_interface", sngl(prsitmp*r1000))
+!   call nc_diag_data2d("air_temperature", sngl(ttmp))
+!   call nc_diag_data2d("specific_humidity", sngl(qtmp))
+!   call nc_diag_data2d("eastward_wind", sngl(utmp))
+!   call nc_diag_data2d("northward_wind", sngl(vtmp))
+!   call nc_diag_data2d("geopotential_height", sngl(hsges) )
+!<<orig
+!   call nc_diag_metadata("surface_geometric_height", sngl(zsges) )         !orig
+    call nc_diag_metadata("surface_altitude", sngl(zsges) )                 !emily
+    call nc_diag_metadata("surface_temperature", sngl(data(iskint,i)) )     !emily
     call nc_diag_metadata("tropopause_pressure", sngl(trop5*r100) )
     call nc_diag_metadata("surface_air_pressure", sngl(psges2*r1000) )
     call nc_diag_metadata("Land_Type_Index", sngl(isli))
+
+!>>emily
+   water_frac = 0.0
+   land_frac  = 0.0
+   ice_frac   = 0.0
+   if (isli == 0) water_frac = 1.0
+   if (isli == 1) land_frac  = 1.0
+   if (isli == 2) ice_frac   = 1.0
+   call nc_diag_metadata("Water_Fraction", sngl(water_frac))
+   call nc_diag_metadata("Land_Fraction",  sngl(land_frac))
+   call nc_diag_metadata("Ice_Fraction",   sngl(ice_frac))
+!<<emily
+
     ! END GEOVALS
     ! extra fields for AMV QC
     call nc_diag_metadata("wind_computation_method", sngl(data(28,i)))
@@ -1947,6 +1998,8 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     call nc_diag_metadata("expected_error", sngl(data(33,i)))
     call nc_diag_metadata("coefficient_of_variation", sngl(data(34,i)))
     ! end extra AMV QC fields
+    if (ictype(ikx) == 290) &
+    call nc_diag_metadata("satellite_identifier", sngl(icsubtype(ikx)))
 
   end subroutine contents_netcdf_diag_
 

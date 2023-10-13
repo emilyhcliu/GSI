@@ -997,8 +997,6 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
            call nc_diag_metadata("Observation",                   sngl(pob)        )
            call nc_diag_metadata("Obs_Minus_Forecast_adjusted",   sngl(pob-pges)   )
            call nc_diag_metadata("Obs_Minus_Forecast_unadjusted", sngl(pob-pgesorig))
-           call nc_diag_metadata("Forecast_adjusted",             sngl(pges)       )
-           call nc_diag_metadata("Forecast_unadjusted",           sngl(pgesorig)   )
  
           if (lobsdiagsave) then
 

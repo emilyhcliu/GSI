@@ -218,7 +218,7 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
   integer(i_kind) k1,k2,k,j,nz,jc,idia,irdim1,istatus,ioff0
   integer(i_kind) ioff,itoss,ikeep,ierror_toq,ierror_poq
   integer(i_kind) isolz,ifovn,itoqf
-  integer(i_kind) mm1,itime,ilat,ilon,ilate,ilone,itoq,ipoq,iafbo !emily
+  integer(i_kind) mm1,itime,ilat,ilon,ilate,ilone,itoq,ipoq,iafbo,iuseflag !emily
   integer(i_kind),dimension(iint,nobs):: idiagbuf
   integer(i_kind),dimension(nlevs):: ipos,iouse,ikeepk
 
@@ -301,6 +301,7 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
   end do
   nlev=jc
 
+  write(6,*)'emily nlev nlevs = ', obstype, nlev, nlevs 
 ! Handle error conditions
   if (nlevs>nlev) write(6,*)'SETUPOZLAY:  level number reduced for ',obstype,' ', &
        nlevs,' --> ',nlev
@@ -350,6 +351,9 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
   itoqf=9     ! index of row anomaly           (omi only)
   ifovn=14    ! index of scan position (gome and omi only)
   iafbo=15    ! index of algorithm flag for best ozone (for omi, ompsnm, and ompstc8)  !emily
+  iuseflag=16 ! index of useflag  !emily
+  if (obstype == 'ompsnp') iuseflag=10  !emily
+
 
 ! If requested, save data for diagnostic ouput
   if(ozone_diagsave)ii=0
@@ -366,7 +370,12 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
         dlat=data(ilat,i)
         dlon=data(ilon,i)
         dtime=data(itime,i)
- 
+
+!>>emily_test
+           ierror_toq = nint(data(itoq,i))
+           ierror_poq = nint(data(ipoq,i))
+!<<emily_test
+
         if (obstype == 'sbuv2' .or. obstype == 'ompsnp') then
            if (nobskeep>0) then
 !             write(6,*)'setupozlay: nobskeep',nobskeep
@@ -425,16 +434,18 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
                 nlevs,mype,doz_dz)
         endif
 
+!>>orig
 !       Check scan position errors in ompstc8
-        if(obstype == "ompstc8") then
-          if(data(ifovn,i) == 1 .or. data(ifovn,i) == 2 .or. &
-             data(ifovn,i) == 3 .or. data(ifovn,i) == 4 .or. &
-             data(ifovn,i) == 35) then
-            if(abs(data(ilate,i)) > 50._r_kind)then
-              luse(i) = .false.
-            endif
-          endif
-        endif
+!        if(obstype == "ompstc8") then
+!          if(data(ifovn,i) == 1 .or. data(ifovn,i) == 2 .or. &
+!             data(ifovn,i) == 3 .or. data(ifovn,i) == 4 .or. &
+!             data(ifovn,i) == 35) then
+!            if(abs(data(ilate,i)) > 50._r_kind)then
+!              luse(i) = .false.
+!            endif
+!          endif
+!        endif
+!<<orig
 
         if(ozone_diagsave .and. luse(i))then
            ii=ii+1
@@ -502,6 +513,28 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
               if(luse(i))stats_oz(2,j) = stats_oz(2,j) + one ! number of obs tossed
            endif
 
+!>>emily
+           if(data(iuseflag,i) < 0) then
+              varinv3(k)=zero
+              ratio_errors(k)=zero
+              rat_err2=zero
+              if(luse(i))stats_oz(2,j) = stats_oz(2,j) + one ! number of obs tossed
+           endif
+           write(6,*)'emily checking iuseflag = ', data(iuseflag,i), varinv3(k)
+!          Check scan position errors in ompstc8
+           if(obstype == "ompstc8") then
+             if(data(ifovn,i) == 1 .or. data(ifovn,i) == 2 .or. &
+                data(ifovn,i) == 3 .or. data(ifovn,i) == 4 .or. &
+                data(ifovn,i) == 35) then
+                if(abs(data(ilate,i)) > 50._r_kind)then
+                  varinv3(k)=zero
+                  ratio_errors(k)=zero
+                  rat_err2=zero
+                  if(luse(i))stats_oz(2,j) = stats_oz(2,j) + one ! number of obs tossed
+                endif
+             endif
+           endif
+!<<emily
 !          Accumulate numbers for statistics
            rat_err2 = ratio_errors(k)**2
            if (varinv3(k)>tiny_r_kind .or. &
@@ -543,6 +576,11 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
            end if
            if (rat_err2*varinv3(k)>tiny_r_kind .and. luse(i)) &
               stats_oz(7,j) = stats_oz(7,j) + one
+
+!>>emily_added
+           varinv4diag(k)=varinv3(k)
+           rat_err4diag=rat_err2
+!<<emily_added
 
 !          Optionally save data for diagnostics
            if (ozone_diagsave .and. luse(i)) then
@@ -598,8 +636,8 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
                     call nc_diag_metadata("TopLevelPressure",sngl(prsitmp(nsig+1)*r1000) )
                     call nc_diag_metadata("BottomLevelPressure", sngl(prsitmp(1)*r1000) )
                  endif
-                 call nc_diag_data2d("mole_fraction_of_ozone_in_air", sngl(ozgestmp*constoz))
-                call nc_diag_data2d("air_pressure_levels",sngl(prsitmp*r1000))
+                 call nc_diag_data2d("mole_fraction_of_ozone_in_air", sngl(ozgestmp*constoz))  !emily: geoval
+                 call nc_diag_data2d("air_pressure_levels",sngl(prsitmp*r1000)) !emily: geoval
                  call nc_diag_metadata("MPI_Task_Number", mype                      )
                  call nc_diag_metadata("Latitude",        sngl(data(ilate,i))       )
                  call nc_diag_metadata("Longitude",       sngl(data(ilone,i))       )
@@ -613,7 +651,10 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
                  call nc_diag_metadata("Input_Observation_Error",      sngl(error(k)))
                  call nc_diag_metadata("Obs_Minus_Forecast_adjusted",  sngl(ozone_inv(k)))
                  call nc_diag_metadata("Obs_Minus_Forecast_unadjusted",sngl(ozone_inv(k)))
-                 if (obstype == 'gome' .or. obstype == 'omieff'  .or. &
+                 call nc_diag_metadata("Forecast_adjusted",            sngl(ozges(k)))   !emily
+                 call nc_diag_metadata("Forecast_unadjusted",          sngl(ozges(k)))   !emily
+!orig            if (obstype == 'gome' .or. obstype == 'omieff'  .or. &
+                 if (obstype == 'gome' .or. obstype == 'omieff'  .or. obstype == 'ompstc8' .or. &  !emily
                      obstype == 'omi'  .or. obstype == 'tomseff' ) then
                     call nc_diag_metadata("Solar_Zenith_Angle", sngl(data(isolz,i)) )
                     call nc_diag_metadata("Scan_Position",      sngl(data(ifovn,i)) )
@@ -622,7 +663,8 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
                     call nc_diag_metadata("Scan_Position",             sngl(rmiss) )
                  endif
                  if (obstype == 'omieff' .or. obstype == 'omi' ) then
-                    call nc_diag_metadata("Row_Anomaly_Index", sngl(data(itoqf,i))  )
+!orig               call nc_diag_metadata("Row_Anomaly_Index", sngl(data(itoqf,i))  )
+                    call nc_diag_metadata("Total_Ozone_Quality_Flag", sngl(data(itoqf,i))  )
                  else
                     call nc_diag_metadata("Row_Anomaly_Index",         sngl(rmiss)  )
                  endif
@@ -1731,8 +1773,8 @@ subroutine setupozlev(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
               call nc_diag_data2d("Observation_Operator_Jacobian_val", real(dhx_dx%val,r_single))
             endif
 			 ! GeoVaLs for JEDI/UFO
-			 call nc_diag_data2d("mole_fraction_of_ozone_in_air", sngl(ozgestmp*constoz))
-			 call nc_diag_data2d("air_pressure_levels",sngl(prsitmp*r1000))
+			 call nc_diag_data2d("mole_fraction_of_ozone_in_air", sngl(ozgestmp*constoz))  !emily:geoval
+			 call nc_diag_data2d("air_pressure_levels",sngl(prsitmp*r1000)) !emily:geoval
            if (lobsdiagsave) then
               do jj=1,miter
                  if (odiag%muse(jj)) then

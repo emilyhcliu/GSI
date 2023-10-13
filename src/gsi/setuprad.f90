@@ -289,7 +289,7 @@ contains
   use crtm_interface, only: ilzen_ang2,iscan_ang2,iszen_ang2,isazi_ang2
   use clw_mod, only: calc_clw, ret_amsua, gmi_37pol_diff
   use qcmod, only: igood_qc,ifail_gross_qc,ifail_interchan_qc,ifail_crtm_qc,ifail_satinfo_qc,qc_noirjaco3,ifail_cloud_qc
-  use qcmod, only: ifail_cao_qc,cao_check  
+  use qcmod, only: ifail_cao_qc,cao_check, ifail_clrfrac_geocsr_qc  !emily  
   use qcmod, only: ifail_iland_det, ifail_isnow_det, ifail_iice_det, ifail_iwater_det, ifail_imix_det, &
                    ifail_iomg_det, ifail_isst_det, ifail_itopo_det,ifail_iwndspeed_det
   use qcmod, only: qc_gmi,qc_saphir,qc_amsr2
@@ -341,6 +341,7 @@ contains
   real(r_kind) node 
   real(r_kind) term,tlap,tb_obsbc1,tb_obsbc16,tb_obsbc17 
   real(r_kind) drad,dradnob,varrad,error,errinv,useflag
+  real(r_kind) errinv_tmp, output_tmp  !emily
   real(r_kind) cg_rad,wgross,wnotgross,wgt,arg,exp_arg
   real(r_kind) tzbgr,tsavg5,trop5,pangs,cld,cldp
   real(r_kind) cenlon,cenlat,slats,slons,zsges,zasat,dtime
@@ -356,6 +357,8 @@ contains
   real(r_kind) dtsavg,r90,coscon,sincon
   real(r_kind) bias       
   real(r_kind) factch6    
+  real(r_kind) factch4        !emily   
+  real(r_kind) qc4emiss_out   !emily   
   real(r_kind) stability,tcwv,hwp_ratio         
   real(r_kind) si_obs,si_fg                
 ! real(r_kind) si_mean                     
@@ -373,6 +376,7 @@ contains
   logical in_curbin, in_anybin, save_jacobian
   logical account_for_corr_obs
   logical,dimension(nobs):: zero_irjaco3_pole
+  logical abi2km    ! use 2km abi data (not CSR/ASR) 
 
 ! Declare local arrays
 
@@ -387,6 +391,7 @@ contains
   real(r_kind),dimension(nchanl):: varinv0,diagadd
   real(r_kind),dimension(nchanl):: varinv,varinv_use,error0,errf,errf0
   real(r_kind),dimension(nchanl):: tb_obs,tbc,tbcnob,tlapchn,tb_obs_sdv
+  real(r_kind),dimension(nchanl):: totbc !emily 
   real(r_kind),dimension(nchanl):: tnoise,tnoise_cld
   real(r_kind),dimension(nchanl):: emissivity,ts,emissivity_k
   real(r_kind),dimension(nchanl):: tsim,wavenumber,tsim_bc
@@ -403,9 +408,27 @@ contains
   real(r_kind),dimension(nchanl):: tcc         
   real(r_kind) :: ptau5deriv, ptau5derivmax
   real(r_kind) :: clw_guess,clw_guess_retrieval,ciw_guess,rain_guess,snow_guess,clw_avg
-  real(r_kind) :: tnoise_save
   real(r_kind),dimension(:), allocatable :: rsqrtinv
   real(r_kind),dimension(:), allocatable :: rinvdiag
+  real(r_kind),dimension(nchanl) :: abi2km_bc
+
+!>>emily
+  real(r_kind),dimension(nchanl):: varinv_grosschk, varinv_sdoei
+  real(r_kind),dimension(nchanl):: varinv_after_jsfcchk,varinv_after_sdoei
+  real(r_kind),dimension(nchanl):: varinv_after_grosschk
+  real(r_kind),dimension(nchanl):: varinv_after_wavenum,varinv_after_rangechk,varinv_after_topo,varinv_after_transmittop
+  real(r_kind),dimension(nchanl):: varinv_after_clddet,varinv_after_jsfcchk_land,varinv_after_nsstret
+  real(r_kind),dimension(nchanl):: varinv_after_grossroutinechk_over_ocean 
+  real(r_kind),dimension(nchanl):: varinv_after_grossroutinechk 
+  real(r_kind),dimension(nchanl):: varinv_after_sfcchk
+  real(r_kind),dimension(nchanl):: varinv_after_ch2chk
+  real(r_kind),dimension(nchanl):: varinv_after_scatteringchk
+  real(r_kind),dimension(nchanl):: varinv_after_sfcterrianchk
+  real(r_kind),dimension(nchanl):: varinv_after_clrfracchk
+  real(r_kind),dimension(nchanl):: varinv_after_stdchk
+  real(r_kind),dimension(nchanl):: varinv_after_stdadj
+  real(r_kind) :: pred9,pred10,pred11  !emily
+!<<emily
 
 !for GMI (dual scan angles)
   real(r_kind),dimension(nchanl):: emissivity2,ts2, emissivity_k2,tsim2
@@ -420,10 +443,10 @@ contains
   integer(i_kind),allocatable,dimension(:) :: sc_index
   integer(i_kind)  :: state_ind, nind, nnz
 
-  logical channel_passive
+  logical,dimension(jpch_rad) :: channel_passive
   logical,dimension(nobs):: luse
   integer(i_kind),dimension(nobs):: ioid ! initial (pre-distribution) obs ID
-  integer(i_kind):: nperobs
+  integer(i_kind):: nperobs,ncr
 
   character(10) filex
   character(12) string
@@ -465,6 +488,8 @@ contains
   sincon     = sin( (r90-55.0_r_kind)*deg2rad )
 
   factch6 = zero  
+  factch4 = zero        !emily  
+  qc4emiss_out = zero   !emily  
   cld   = zero
   cldp  = zero
   tpwc_obs  = zero
@@ -478,7 +503,6 @@ contains
         pred(j,i)=zero
      end do
   end do
-
 
 ! Initialize logical flags for satellite platform
 
@@ -520,6 +544,7 @@ contains
   atms       = obstype == 'atms'
   saphir     = obstype == 'saphir'
   abi        = obstype == 'abi'
+  abi2km     = .false.
 
   ssmis=ssmis_las.or.ssmis_uas.or.ssmis_img.or.ssmis_env.or.ssmis 
 
@@ -540,6 +565,7 @@ contains
   jc=0
 
   do j=1,jpch_rad
+     channel_passive(j)=iuse_rad(j)==-1 .or. iuse_rad(j)==0
      if(isis == nusis(j))then 
         jc=jc+1
         if(jc > nchanl)then
@@ -558,10 +584,9 @@ contains
 !
 !       Set error instrument channels
         tnoise(jc)=varch(j)
-        channel_passive=iuse_rad(j)==-1 .or. iuse_rad(j)==0
-        if (iuse_rad(j)< -1 .or. (channel_passive .and.  &
+        if (iuse_rad(j)< -1 .or. (channel_passive(j) .and.  &
            .not.rad_diagsave)) tnoise(jc)=r1e10
-        if (passive_bc .and. channel_passive) tnoise(jc)=varch(j)
+        if (passive_bc .and. channel_passive(j)) tnoise(jc)=varch(j)
         if (iuse_rad(j)>0) l_may_be_passive=.true.
         if (tnoise(jc) < 1.e4_r_kind) toss = .false.
 
@@ -776,6 +801,7 @@ contains
 
 ! Loop over data in this block
   call dtime_setup()
+! write(6,*)'emily checking nobs = ', isis, nobs
   do n = 1,nobs
 !    Extract analysis relative observation time.
      dtime = data_s(itime,n)
@@ -813,7 +839,7 @@ contains
         if(seviri .and. abs(data_s(iszen_ang,n)) > 180.0_r_kind) data_s(iszen_ang,n)=r100
  
  
-!  Set land/sea, snow, ice percentages and flags (no time interpolation)
+!  Set land/sea, snow, i e percentages and flags (no time interpolation)
 
         sea  = data_s(ifrac_sea,n)  >= 0.99_r_kind
         land = data_s(ifrac_lnd,n)  >= 0.99_r_kind
@@ -845,25 +871,6 @@ contains
              iinstr=getindex(idnames,trim(covtype))
           endif
         endif
-        do jc=1,nchanl
-           j=ich(jc)
-
-           tnoise(jc)=varch(j)
-
-           if(sea   .and. (varch_sea(j)>zero))   tnoise(jc)=varch_sea(j)
-           if(land  .and. (varch_land(j)>zero))  tnoise(jc)=varch_land(j)
-           if(ice   .and. (varch_ice(j)>zero))   tnoise(jc)=varch_ice(j)
-           if(snow  .and. (varch_snow(j)>zero))  tnoise(jc)=varch_snow(j)
-           if(mixed .and. (varch_mixed(j)>zero)) tnoise(jc)=varch_mixed(j)
-           tnoise_save = tnoise(jc)
-
-           channel_passive=iuse_rad(j)==-1 .or. iuse_rad(j)==0
-           if (iuse_rad(j)< -1 .or. (channel_passive .and.  &
-                .not.rad_diagsave)) tnoise(jc)=r1e10
-           if (passive_bc .and. channel_passive) tnoise(jc)=tnoise_save
-           if (tnoise(jc) < 1.e4_r_kind) toss = .false.
-        end do
-
 !       Count data of different surface types
         if(luse(n))then
            if (mixed) then
@@ -884,9 +891,30 @@ contains
            endif
         endif
 
+        do jc=1,nchanl
+           j=ich(jc)
+
+           tnoise(jc)=varch(j)
+
+           if(mixed .and. (varch_mixed(j)>zero)) then
+              tnoise(jc)=varch_mixed(j)
+           else if(snow  .and. (varch_snow(j)>zero))  then
+              tnoise(jc)=varch_snow(j)
+           else if(ice   .and. (varch_ice(j)>zero))   then
+              tnoise(jc)=varch_ice(j)
+           else if(land  .and. (varch_land(j)>zero))  then
+              tnoise(jc)=varch_land(j)
+           else if(sea   .and. (varch_sea(j)>zero))   then
+              tnoise(jc)=varch_sea(j)
+           end if
+
+           if (.not. (passive_bc .and. channel_passive(j))) then
+              if (iuse_rad(j)< -1 .or. (channel_passive(j) .and.  &
+                  .not.rad_diagsave)) tnoise(jc)=r1e10
+           end if
+     
 !       Load channel data into work array.
-        do i = 1,nchanl
-           tb_obs(i) = data_s(i+nreal,n)
+           tb_obs(jc) = data_s(jc+nreal,n)
         end do
  
 
@@ -994,10 +1022,11 @@ contains
            tsavg5=tsavg5+dtsavg
         endif
 
+!       Compute microwave cloud liquid water or graupel water path for bias correction and QC.
+        if (adp_anglebc) then
 !       If using adaptive angle dependent bias correction, update the predicctors
 !       for this part of bias correction.  The AMSUA cloud liquid water algorithm
 !       uses total angle dependent bias correction for channels 1 and 2
-        if (adp_anglebc) then
            do i=1,nchanl
               mm=ich(i)
               if (goessndr .or. goes_img .or. ahi .or. seviri .or. ssmi .or. ssmis .or. gmi .or. abi) then
@@ -1016,8 +1045,7 @@ contains
               end if
            end do
         end if
-
-!       Compute microwave cloud liquid water or graupel water path for bias correction and QC.
+!*****
         clw_obs=zero
         clw_guess_retrieval=zero
         gwp=zero
@@ -1054,10 +1082,8 @@ contains
                 id_qc(1:nchanl) = ifail_cloud_qc
              endif
            endif
-        endif
         ! Screening for cold-air outbreak area (only applied to MW for now)
-        if (cao_check .and. radmod%lprecip) then   
-           if(microwave .and. sea) then 
+           if (cao_check .and. radmod%lprecip) then   
               if(radmod%lcloud_fwd) then                            
                  cao_flag = (stability < 12.0_r_kind) .and. (hwp_ratio  < half) .and.  (tcwv < 8.0_r_kind) 
                  if (cao_flag) then ! remove all tropospheric channels
@@ -1080,11 +1106,16 @@ contains
            endif
         endif
 
+!       totbc = total bias correction  !emily
+        totbc=zero  !emily
         predbias=zero
-        cld_rbc_idx2=zero
+        abi2km_bc = zero
+        abi2km_bc(2) = 233.5_r_kind
+        abi2km_bc(3) = 241.7_r_kind
+        abi2km_bc(4) = 250.5_r_kind
+!$omp parallel do  schedule(dynamic,1) private(i,mm,j,k,tlap,node,bias)
         do i=1,nchanl
            mm=ich(i)
-
 
 !*****
 !     COMPUTE AND APPLY BIAS CORRECTION TO SIMULATED VALUES
@@ -1111,30 +1142,10 @@ contains
            else
               pred(3,i) = clw_obs*cosza*cosza
            end if
+
            if(radmod%lcloud_fwd .and. sea) pred(3,i ) = zero
  
-
-
-
 !       Apply bias correction
- 
-           kmax(i) = 0
-           if (lwrite_peakwt .or. passive_bc) then
-              ptau5derivmax = -9.9e31_r_kind
-! maximum of weighting function is level at which transmittance
-! (ptau5) is changing the fastest.  This is used for the level
-! assignment (needed for vertical localization).
-              weightmax(i) = zero
-              do k=2,nsig
-                 ptau5deriv = abs( (ptau5(k-1,i)-ptau5(k,i))/ &
-                    (log(prsltmp(k-1))-log(prsltmp(k))) )
-                 if (ptau5deriv > ptau5derivmax) then
-                    ptau5derivmax = ptau5deriv
-                    kmax(i) = k
-                    weightmax(i) = r10*prsitmp(k) ! cb to mb.
-                 end if
-              enddo
-           end if
 
            tlapchn(i)= (ptau5(2,i)-ptau5(1,i))*(tsavg5-tvp(2))
            do k=2,nsig-1
@@ -1180,6 +1191,18 @@ contains
               end do
            end if
 
+           if (abi2km .and. regional) then
+              pred(:,i) = zero
+              if (i>=2 .and. i<=4) then
+                 if (tb_obs(i) > 190.0_r_kind .and. tb_obs(i) < 300.0_r_kind) then
+                    pred(1,i)=1.0_r_kind
+                    pred(2,i)=tb_obs(i)-abi2km_bc(i)
+                    pred(3,i)=(tb_obs(i)-abi2km_bc(i))**2
+                    pred(4,i)=(tb_obs(i)-abi2km_bc(i))**3
+                 end if
+              end if
+           end if
+
            do j = 1,npred
               predbias(j,i) = predchan(j,i)*pred(j,i)
            end do
@@ -1196,12 +1219,14 @@ contains
 !          tbcnob = obs - guess before bias correction
            tbcnob(i)    = tb_obs(i) - tsim(i)  
            tbc(i)       = tbcnob(i)                     
- 
+
            do j=1, npred-angord
               tbc(i)=tbc(i) - predbias(j,i) !obs-ges with bias correction
+              totbc(i) = totbc(i) + predbias(j,i)
            end do
            tbc(i)=tbc(i) - predbias(npred+1,i)
            tbc(i)=tbc(i) - predbias(npred+2,i)
+           totbc(i) = totbc(i) + predbias(npred+1,i)+predbias(npred+2,i)
 
 !          Calculate cloud effect for QC
            if (radmod%cld_effect .and. eff_area) then
@@ -1216,15 +1241,37 @@ contains
               bias = bias+predbias(npred+2,i)
               cldeff_obs(i)=cldeff_obs(i) - bias       ! observed cloud delta (bias corrected)                
            endif
-
-!       End of loop over channels
         end do
+
+        kmax = 0
+        if (lwrite_peakwt .or. passive_bc) then
+!$omp parallel do  schedule(dynamic,1) private(i,k,ptau5derivmax,ptau5deriv)
+           do i=1,nchanl
+              ptau5derivmax = -9.9e31_r_kind
+! maximum of weighting function is level at which transmittance
+! (ptau5) is changing the fastest.  This is used for the level
+! assignment (needed for vertical localization).
+              weightmax(i) = zero
+              do k=2,nsig
+                 ptau5deriv = abs( (ptau5(k-1,i)-ptau5(k,i))/ &
+                    (log(prsltmp(k-1))-log(prsltmp(k))) )
+                 if (ptau5deriv > ptau5derivmax) then
+                    ptau5derivmax = ptau5deriv
+                    kmax(i) = k
+                    weightmax(i) = r10*prsitmp(k) ! cb to mb.
+                 end if
+              enddo
+!       End of loop over channels
+           end do
+        end if
 
 !       Compute retrieved microwave cloud liquid water and 
 !       assign cld_rbc_idx for bias correction in allsky conditions
         cld_rbc_idx=one
+        cld_rbc_idx2=zero
         if (radmod%lcloud_fwd .and. radmod%ex_biascor .and. eff_area) then
            ierrret=0
+!$omp parallel do  schedule(dynamic,1) private(i,mm,j)
            do i=1,nchanl
               mm=ich(i)
               tsim_bc(i)=tsim(i)
@@ -1240,19 +1287,19 @@ contains
               tsim_clr_bc(i)=tsim_clr_bc(i)+predbias(npred+2,i)
            end do
 
-           if(amsua.or.atms) call ret_amsua(tsim_bc,nchanl,tsavg5,zasat,clw_guess_retrieval,ierrret)
-           if(gmi) then
-             call gmi_37pol_diff(tsim_bc(6),tsim_bc(7),tsim_clr_bc(6),tsim_clr_bc(7),clw_guess_retrieval,ierrret)
-             call gmi_37pol_diff(tb_obs(6),tb_obs(7),tsim_clr_bc(6),tsim_clr_bc(7),clw_obs,ierrret)
+           if(amsua.or.atms) then
+              call ret_amsua(tsim_bc,nchanl,tsavg5,zasat,clw_guess_retrieval,ierrret)
+           else if(gmi) then
+              call gmi_37pol_diff(tsim_bc(6),tsim_bc(7),tsim_clr_bc(6),tsim_clr_bc(7),clw_guess_retrieval,ierrret)
+              call gmi_37pol_diff(tb_obs(6),tb_obs(7),tsim_clr_bc(6),tsim_clr_bc(7),clw_obs,ierrret)
            end if
            if (radmod%ex_obserr=='ex_obserr1') then
               call radiance_ex_biascor(radmod,nchanl,tsim_bc,tsavg5,zasat, &
                        clw_guess_retrieval,clw_obs,cld_rbc_idx,ierrret)
-           end if
-!          if (radmod%ex_obserr=='ex_obserr2') then     ! comment out for now, need to be tested
+!          else if (radmod%ex_obserr=='ex_obserr2') then     ! comment out for now, need to be tested
 !             call radiance_ex_biascor(radmod,nchanl,cldeff_obs,cldeff_fg,cld_rbc_idx)
 !          end if
-           if (radmod%ex_obserr=='ex_obserr3') then
+           else if (radmod%ex_obserr=='ex_obserr3') then
               call radiance_ex_biascor_gmi(radmod,clw_obs,clw_guess_retrieval,nchanl,cld_rbc_idx)
            end if
 
@@ -1305,17 +1352,17 @@ contains
 
 !       Assign observation error for all-sky radiances 
         if (radmod%lcloud_fwd .and. eff_area)  then
-           if (radmod%ex_obserr=='ex_obserr1') &
+           if (radmod%ex_obserr=='ex_obserr1') then
               call radiance_ex_obserr(radmod,nchanl,clw_obs,clw_guess_retrieval,tnoise,tnoise_cld,error0)
-           if (radmod%ex_obserr=='ex_obserr3') &
+           else if (radmod%ex_obserr=='ex_obserr3') then
               call radiance_ex_obserr_gmi(radmod,nchanl,clw_obs,clw_guess_retrieval,tnoise,tnoise_cld,error0) 
+           end if
         end if
 
         do i=1,nchanl
            mm=ich(i)
-           channel_passive=iuse_rad(ich(i))==-1 .or. iuse_rad(ich(i))==0
-           if(tnoise(i) < 1.e4_r_kind .or. (channel_passive .and. rad_diagsave) &
-                  .or. (passive_bc .and. channel_passive))then
+           if(tnoise(i) < 1.e4_r_kind .or. (channel_passive(mm) .and. rad_diagsave) &
+                  .or. (passive_bc .and. channel_passive(mm)))then
               varinv(i)     = varinv(i)/error0(i)**2
               errf(i)       = error0(i)
            else
@@ -1347,14 +1394,10 @@ contains
 
            do i=1,nchanl
               m=ich(i)
-              if (varinv(i) < tiny_r_kind) then
-                 varinv_use(i) = zero
+              if (icld_det(m)>0 .and. varinv(i) >= tiny_r_kind) then
+                 varinv_use(i) = varinv(i)
               else
-                 if ((icld_det(m)>0)) then
-                    varinv_use(i) = varinv(i)
-                 else
-                    varinv_use(i) = zero
-                 end if
+                 varinv_use(i) = zero
               end if
            end do
            call qc_irsnd(nchanl,is,ndat,nsig,ich,sea,land,ice,snow,luse(n),goessndr, &
@@ -1381,7 +1424,8 @@ contains
 
            call qc_amsua(nchanl,is,ndat,nsig,npred,sea,land,ice,snow,mixed,luse(n),   &
               zsges,cenlat,tb_obsbc1,cosza,clw_obs,tbc,ptau5,emissivity_k,ts, &                   
-              pred,predchan,id_qc,aivals,errf,errf0,clw_obs,varinv,cldeff_obs,cldeff_fg,factch6, & 
+              pred,predchan,id_qc,aivals,errf,errf0,clw_obs,varinv,varinv_sdoei,varinv_grosschk,varinv_after_jsfcchk,varinv_after_sdoei,cldeff_obs,cldeff_fg,factch6,factch4,qc4emiss_out,  &   !emily
+           !  pred,predchan,id_qc,aivals,errf,errf0,clw_obs,varinv,cldeff_obs,cldeff_fg,factch6, &  !orig
               cld_rbc_idx,sfc_speed,error0,clw_guess_retrieval,scatp,radmod)                    
 
 !  If cloud impacted channels not used turn off predictor
@@ -1422,7 +1466,8 @@ contains
 
            call qc_atms(nchanl,is,ndat,nsig,npred,sea,land,ice,snow,mixed,luse(n),    &
               zsges,cenlat,tb_obsbc1,cosza,clw_obs,tbc,ptau5,emissivity_k,ts, & 
-              pred,predchan,id_qc,aivals,errf,errf0,clw_obs,varinv,cldeff_obs,cldeff_fg,factch6, &
+              pred,predchan,id_qc,aivals,errf,errf0,clw_obs,varinv,varinv_sdoei,varinv_grosschk,varinv_after_jsfcchk,varinv_after_sdoei,cldeff_obs,cldeff_fg,factch6,factch4,qc4emiss_out, & ! emily 
+           !  pred,predchan,id_qc,aivals,errf,errf0,clw_obs,varinv,cldeff_obs,cldeff_fg,factch6, & !orig
               cld_rbc_idx,sfc_speed,error0,clw_guess_retrieval,scatp,radmod)                   
 
 !  ---------- GOES imager --------------
@@ -1446,14 +1491,10 @@ contains
         else if (seviri .or. abi .or. ahi) then
            do i=1,nchanl
               m=ich(i)
-              if (varinv(i) < tiny_r_kind) then
-                 varinv_use(i) = zero
+              if (icld_det(m)>0 .and. varinv(i) >= tiny_r_kind) then
+                 varinv_use(i) = varinv(i)
               else
-                 if ((icld_det(m)>0)) then
-                    varinv_use(i) = varinv(i)
-                 else
-                    varinv_use(i) = zero
-                 end if
+                 varinv_use(i) = zero
               end if
            end do
 
@@ -1463,7 +1504,21 @@ contains
 
            call qc_geocsr(nchanl,is,ndat,nsig,ich,sea,land,ice,snow,luse(n), &
               zsges,trop5,tzbgr,tsavg5,tb_obs_sdv,tbc,tb_obs,tnoise,ptau5,prsltmp,tvp,temp,wmix,emissivity_k,ts,   &
-              id_qc,aivals,errf,varinv,varinv_use,cld,cldp,kmax,abi,ahi,seviri)
+!             id_qc,aivals,errf,varinv,varinv_use,cld,cldp,kmax,abi,ahi,seviri)
+!>>emily
+              id_qc,aivals,errf,varinv,varinv_use, &
+              varinv_after_sfcterrianchk, &
+              varinv_after_rangechk, &
+              varinv_after_topo, &
+              varinv_after_transmittop, &
+              varinv_after_clddet, &
+              varinv_after_stdchk, &
+              varinv_after_grossroutinechk, &
+              varinv_after_stdadj, &
+              varinv_after_nsstret, &
+              varinv_after_jsfcchk, &
+!<<emily
+              cld,cldp,kmax,abi,ahi,seviri)
 
            cld = 100-data_s(iclr_sky,n)
 
@@ -1473,24 +1528,33 @@ contains
                  if((abi .or. ahi) .and. i/=2 .and. i/=3) then
                     varinv(i)=zero
                     varinv_use(i)=zero
+                    if (id_qc(i)==igood_qc) id_qc(i) = ifail_clrfrac_geocsr_qc
+!emily
                  end if
                  if(seviri .and. i/=2) then
                     varinv(i)=zero
+                    if (id_qc(i)==igood_qc) id_qc(i) = ifail_clrfrac_geocsr_qc
+!emily
                  end if
               end do
            end if
+!>>emily
+           do i=1,nchanl
+              varinv_after_clrfracchk(i) = varinv(i) 
+           end do
+!<<emily
 
 !
 !          additional qc for surface and  chn7.3: use split window chns to remove opaque clouds
-           do i = 1,nchanl
-              if( (abi .or. ahi ).and. i/=2 .and. i/=3 ) then
-                if( varinv(i) > tiny_r_kind .and. &
-                   (tb_obs(7)-tb_obs(8))-(tsim(7)-tsim(8)) <= -0.75_r_kind) then
-                    varinv(i)=zero
-                    varinv_use(i)=zero
-                end if
-              end if
-           end do
+           if(abi .or. ahi) then
+              do i = 1,nchanl
+                 if( i/=2 .and. i/=3 .and.varinv(i) > tiny_r_kind) then
+                   if((tb_obs(7)-tb_obs(8))-(tsim(7)-tsim(8)) <= -0.75_r_kind) then
+                       varinv(i)=zero
+                   end if
+                 end if
+              end do
+           end if
 !
 
 !  ---------- AVRHRR --------------
@@ -1508,20 +1572,18 @@ contains
 !     channels with iuse_rad=-1 or 0 are used in cloud detection.
            do i=1,nchanl
               m=ich(i)
-              if (varinv(i) < tiny_r_kind) then
-                 varinv_use(i) = zero
+              if (icld_det(m)>0 .and. varinv(i) >= tiny_r_kind) then
+                 varinv_use(i) = varinv(i)
               else
-                 if ((icld_det(m)>0)) then
-                    varinv_use(i) = varinv(i)
-                 else
-                    varinv_use(i) = zero
-                 end if
+                 varinv_use(i) = zero
               end if
            end do
 
            call qc_avhrr(nchanl,is,ndat,nsig,ich,sea,land,ice,snow,luse(n),   &
               zsges,cenlat,frac_sea,pangs,trop5,tzbgr,tsavg5,tbc,tb_obs,tnoise,     &
               wavenumber,ptau5,prsltmp,tvp,temp,wmix,emissivity_k,ts, &
+              varinv_after_wavenum,varinv_after_rangechk,varinv_after_topo,varinv_after_transmittop, &  !emily
+              varinv_after_clddet, varinv_after_nsstret, varinv_after_jsfcchk, & !emily
               id_qc,aivals,errf,varinv,varinv_use,cld,cldp)
 
         else if (viirs) then
@@ -1531,20 +1593,18 @@ contains
 !  NOTE:  use qc_avhrr for viirs qc
            do i=1,nchanl
               m=ich(i)
-              if (varinv(i) < tiny_r_kind) then
-                 varinv_use(i) = zero
+              if (icld_det(m)>0 .and. varinv(i) >= tiny_r_kind) then
+                 varinv_use(i) = varinv(i)
               else
-                 if ((icld_det(m)>0)) then
-                    varinv_use(i) = varinv(i)
-                 else
-                    varinv_use(i) = zero
-                 end if
+                 varinv_use(i) = zero
               end if
            end do
 
            call qc_avhrr(nchanl,is,ndat,nsig,ich,sea,land,ice,snow,luse(n),   &
               zsges,cenlat,frac_sea,pangs,trop5,tzbgr,tsavg5,tbc,tb_obs,tnoise, &
               wavenumber,ptau5,prsltmp,tvp,temp,wmix,emissivity_k,ts, &
+              varinv_after_wavenum,varinv_after_rangechk,varinv_after_topo,varinv_after_transmittop, &  !emily
+              varinv_after_clddet, varinv_after_nsstret, varinv_after_jsfcchk, & !emily
               id_qc,aivals,errf,varinv,varinv_use,cld,cldp)
 
 !  ---------- SSM/I , SSMIS, AMSRE  -------------------
@@ -1552,7 +1612,6 @@ contains
 
         else if( ssmi .or. amsre .or. ssmis )then   
 
-           frac_sea=data_s(ifrac_sea,n)
            if(amsre)then
               bearaz= (270._r_kind-data_s(ilazi_ang,n))*deg2rad
               sun_zenith=data_s(iszen_ang,n)*deg2rad
@@ -1565,6 +1624,15 @@ contains
               zsges,luse(n),sea,mixed, &
               temp,wmix,ts,emissivity_k,ierrret,kraintype,tpwc_obs,clw_obs,sgagl,tzbgr, &
               tbc,tbcnob,tsim,tnoise,ssmi,amsre_low,amsre_mid,amsre_hig,ssmis, &
+              varinv_after_grossroutinechk_over_ocean, &  !emily
+              varinv_after_topo,           &  !emily
+              varinv_after_sfcchk,         &  !emily
+              varinv_after_ch2chk,         &  !emily
+              varinv_after_grossroutinechk,&  !emily
+              varinv_after_scatteringchk,  &  !emily
+              varinv_after_nsstret,        &  !emily
+              varinv_after_jsfcchk,        &  !emily
+              pred9,pred10,pred11,         &  !emily
               varinv,errf,aivals(1,is),id_qc)
 
 !  ---------- AMSR2  -------------------
@@ -1654,23 +1722,33 @@ contains
                  if(luse(n))aivals(7,is) = aivals(7,is) + one
               end if
            end if
+           varinv_after_grosschk(i) = varinv(i)   !emily
         end do
 
         if(amsua .or. atms .or. amsub .or. mhs .or. msu .or. hsb)then
-           if(amsua)nlev=6
-           if(atms)nlev=7
-           if(amsub .or. mhs)nlev=5
-           if(hsb)nlev=4
-           if(msu)nlev=4
+           if(amsua)then
+              nlev=6
+           else if(atms)then
+              nlev=7
+           else if(amsub .or. mhs)then
+              nlev=5
+           else if(hsb)then
+              nlev=4
+           else if(msu)then
+              nlev=4
+           end if
            kval=0
            do i=2,nlev
 !          do i=1,nlev
-              channel_passive=iuse_rad(ich(i))==-1 .or. iuse_rad(ich(i))==0
-              if (varinv(i)<tiny_r_kind .and. ((iuse_rad(ich(i))>=1) .or. &
-                  (passive_bc .and. channel_passive))) then
+              mm=ich(i)
+              if (varinv(i)<tiny_r_kind .and. ((iuse_rad(mm)>=1) .or. &
+                  (passive_bc .and. channel_passive(mm)))) then
                  kval=max(i-1,kval)
-                 if(amsub .or. hsb .or. mhs)kval=nlev
-                 if((amsua .or. atms) .and. i <= 3)kval = zero
+                 if(amsub .or. hsb .or. mhs)then
+                    kval=nlev
+                 else if((amsua .or. atms) .and. i <= 3) then
+                    kval = zero
+                 end if
               end if
            end do
            if(kval > 0)then
@@ -1681,60 +1759,55 @@ contains
               if(amsua)then
                  varinv(15)=zero
                  if(id_qc(15) == igood_qc)id_qc(15)=ifail_interchan_qc
-              end if
-              if (atms) then
+              else if (atms) then
                  varinv(16:18)=zero
                  if(id_qc(16) == igood_qc)id_qc(16)=ifail_interchan_qc
                  if(id_qc(17) == igood_qc)id_qc(17)=ifail_interchan_qc
                  if(id_qc(18) == igood_qc)id_qc(18)=ifail_interchan_qc
               end if
            end if
-        end if
 
-        if(mhs.or.amsub)then
-          do i = 1, nchanl
-             m =  ich(i)
-             if(sea .and. isst_det(m) >0 .and. tsavg5 < 278.0_r_kind) then
-                 varinv(i) = zero
-                 if(id_qc(i) == igood_qc)id_qc(i)=ifail_isst_det
-             endif
-
-             if(sea .and. iwndspeed_det(m)>0 .and. tsavg5 < 285.0_r_kind .and. sfc_speed > 10.0_r_kind) then
-                varinv(i) = zero
-                if(id_qc(i) == igood_qc)id_qc(i)=ifail_iwndspeed_det
-             endif
-             if(iomg_det(m) > 0 .and. abs(tbcnob(2)) > 5.0_r_kind) then
-                varinv(i) = zero
-                if(id_qc(i) == igood_qc)id_qc(i)=ifail_iomg_det
-             endif
-
-             if(itopo_det(m) > 0 .and. zsges > 1000.0_r_kind ) then
-                 varinv(i) = zero
-                 if(id_qc(i) == igood_qc)id_qc(i)=ifail_itopo_det
-             endif
-          enddo
+          if(mhs.or.amsub)then
+            do i = 1, nchanl
+               m =  ich(i)
+               if(sea)then
+                  if(isst_det(m) >0 .and. tsavg5 < 278.0_r_kind) then
+                      varinv(i) = zero
+                      if(id_qc(i) == igood_qc)id_qc(i)=ifail_isst_det
+  
+                  else if(iwndspeed_det(m)>0 .and. tsavg5 < 285.0_r_kind .and. sfc_speed > 10.0_r_kind) then
+                     varinv(i) = zero
+                     if(id_qc(i) == igood_qc)id_qc(i)=ifail_iwndspeed_det
+                  endif
+               end if
+               if(iomg_det(m) > 0 .and. abs(tbcnob(2)) > 5.0_r_kind) then
+                  varinv(i) = zero
+                  if(id_qc(i) == igood_qc)id_qc(i)=ifail_iomg_det
+  
+               else if(itopo_det(m) > 0 .and. zsges > 1000.0_r_kind ) then
+                   varinv(i) = zero
+                   if(id_qc(i) == igood_qc)id_qc(i)=ifail_itopo_det
+               endif
+            enddo
+          endif
         endif
 
 !       Screen out land surface types by channel. Flags are set in satinfo file.
         do i = 1, nchanl
            m =  ich(i)
-           if(iwater_det(m) > 0 .and. sea) then
+           if(sea .and. iwater_det(m) > 0) then
               varinv(i) = zero
               if(id_qc(i) == igood_qc)id_qc(i)=ifail_iwater_det
-           endif
-           if(isnow_det(m) > 0 .and. snow) then
+           else if(snow .and. isnow_det(m) > 0 ) then
               varinv(i) = zero
               if(id_qc(i) == igood_qc)id_qc(i)=ifail_isnow_det
-           endif
-           if(mixed .and. imix_det(m) > 0) then
+           else if(mixed .and. imix_det(m) > 0) then
               varinv(i) = zero
               if(id_qc(i) == igood_qc)id_qc(i)=ifail_imix_det
-           endif
-           if(land .and. iland_det(m) > 0) then
+           else if(land .and. iland_det(m) > 0) then
               varinv(i) = zero
               if(id_qc(i) == igood_qc)id_qc(i)=ifail_iland_det
-           endif
-           if(ice .and. iice_det(m) > 0) then
+           else if(ice .and. iice_det(m) > 0) then
               varinv(i) = zero
               if(id_qc(i) == igood_qc)id_qc(i)=ifail_iice_det
            endif
@@ -1749,39 +1822,36 @@ contains
            endif
         endif
 
-        do i = 1,nchanl
-
 !          Reject radiances for single radiance test
-           if (lsingleradob) then
+        if (lsingleradob) then
+           do i = 1,nchanl
+
               ! if the channels are beyond 0.01 of oblat/oblon, specified
               ! in gsi namelist, or aren't of type 'oneob_type', reject
               if ( (abs(cenlat - oblat) > one/r100 .or. &
                     abs(cenlon - oblon) > one/r100) .or. &
                     obstype /= oneob_type ) then
                  varinv(i) = zero
-                 varinv_use(i) = zero
                  if (id_qc(i) == igood_qc) id_qc(i) = ifail_outside_range
               else
                  ! if obchan <= zero, keep all footprints, if obchan > zero,
                  ! keep only that which has channel obchan
                  if (i /= obchan .and. obchan > zero) then
                     varinv(i) = zero
-                    varinv_use(i) = zero
                     if (id_qc(i) == igood_qc) id_qc(i) = ifail_outside_range
                  endif
               endif !cenlat/lon
-           endif !lsingleradob
 
-        enddo
+           enddo
+        endif !lsingleradob
 
         diagadd=zero
         account_for_corr_obs = .false.
-        iii=0
         varinv0=zero
+!$omp parallel do  schedule(dynamic,1) private(ii,m,k,asum)
         do ii=1,nchanl
            m=ich(ii)
            if (varinv(ii)>tiny_r_kind .and. iuse_rad(m)>=1) then
-             iii=iii+1
              varinv0(ii)=varinv(ii)
              raterr2(ii)=error0(ii)**2*varinv0(ii)
              if (l_may_be_passive .and. .not. retrieval) then
@@ -1795,10 +1865,17 @@ contains
              end if
            end if
         enddo
+        iii=0
+        do ii=1,nchanl
+           m=ich(ii)
+           if (varinv(ii)>tiny_r_kind .and. iuse_rad(m)>=1) then
+             iii=iii+1
+           end if
+        end do
         err2 = one/error0**2
         tbc0=tbc
         tb_obs0=tb_obs
-        wgtjo=varinv0
+        wgtjo=varinv
         if (l_may_be_passive .and. .not. retrieval) then
           if(iii>0 .and. iinstr.ne.-1)then
             chan_count=(iii*(iii+1))/2
@@ -1825,18 +1902,14 @@ contains
 
               m = ich(i)
               if(luse(n))then
-                 drad    = tbc0(i)   
-                 dradnob = tbcnob(i)
+                 drad    = tbc0(i)*cld_rbc_idx(i)
+                 dradnob = tbcnob(i)*cld_rbc_idx(i)
                  varrad  = tbc(i)*varinv(i)
                  stats(1,m)  = stats(1,m) + one              !number of obs
-!                stats(3,m)  = stats(3,m) + drad             !obs-mod(w_biascor)
-!                stats(4,m)  = stats(4,m) + tbc0(i)*drad     !(obs-mod(w_biascor))**2
-!                stats(5,m)  = stats(5,m) + tbc(i)*varrad    !penalty contribution
-!                stats(6,m)  = stats(6,m) + dradnob          !obs-mod(w/o_biascor)
-                 stats(3,m)  = stats(3,m) + drad*cld_rbc_idx(i)        !obs-mod(w_biascor)
-                 stats(4,m)  = stats(4,m) + tbc0(i)*drad*cld_rbc_idx(i)!(obs-mod(w_biascor))**2
+                 stats(3,m)  = stats(3,m) + drad             !obs-mod(w_biascor)
+                 stats(4,m)  = stats(4,m) + tbc0(i)*drad     !(obs-mod(w_biascor))**2
                  stats(5,m)  = stats(5,m) + tbc(i)*varrad    !penalty contribution
-                 stats(6,m)  = stats(6,m) + dradnob*cld_rbc_idx(i)     !obs-mod(w/o_biascor)
+                 stats(6,m)  = stats(6,m) + dradnob          !obs-mod(w/o_biascor)
 
                  if (account_for_corr_obs .and. (cor_opt ==1 .or. cor_opt ==2) ) then
                    exp_arg = -half*tbc(i)**2
@@ -1870,7 +1943,7 @@ contains
 
 !                   summation of observation number
                     if (newpc4pred) then
-                       ostats(m)  = ostats(m) + one*cld_rbc_idx(i)
+                       ostats(m)  = ostats(m) + cld_rbc_idx(i)
                     end if
                  end if
 
@@ -1881,12 +1954,11 @@ contains
 
 !             At the end of analysis, prepare for bias correction for monitored channels
 !             Only "good monitoring" obs are included in J_passive calculation.
-              channel_passive=iuse_rad(m)==-1 .or. iuse_rad(m)==0
-              if (passive_bc .and. (jiter>miter) .and. channel_passive) then
+              if (passive_bc .and. (jiter>miter) .and. channel_passive(m)) then
 !                summation of observation number,
 !                skip ostats accumulation for channels without coef. initialization 
                  if (newpc4pred .and. luse(n) .and. any(predx(:,m)/=zero)) then
-                    ostats(m)  = ostats(m) + one*cld_rbc_idx(i)
+                    ostats(m)  = ostats(m) + cld_rbc_idx(i)
                  end if
                  iccm=iccm+1
               end if
@@ -1932,7 +2004,7 @@ contains
                        my_head%raterr2(icc),my_head%pred(npred,icc), &
                        my_head%dtb_dvar(nsigradjac,icc), &
                        my_head%ich(icc),&
-                       my_head%icx(icc))
+                       my_head%icx(icc),my_head%iccerr(icc))
               if(luse_obsdiag)allocate(my_head%diags(icc))
 
               call get_ij(mm1,slats,slons,my_head%ij,my_head%wij)
@@ -1999,6 +2071,13 @@ contains
                       end if
                     end if  ! end of newpc4pred loop
                  end if
+              end do
+              ncr=0
+              do ii=1,iii
+                 my_head%iccerr(ii) = ncr
+                 do mm=1,ii
+                   ncr=ncr+1
+                 end do
               end do
               my_head%nchan  = iii         ! profile observation count
 
@@ -2094,23 +2173,28 @@ contains
               allocate(my_headm%res(iccm),my_headm%err2(iccm), &
                        my_headm%raterr2(iccm),my_headm%pred(npred,iccm), &
                        my_headm%ich(iccm), &
-                       my_headm%icx(iccm))
+                       my_headm%icx(iccm),my_headm%iccerr(iccm))
 
               my_headm%nchan  = iccm        ! profile observation count
               my_headm%time=dtime
               my_headm%luse=luse(n)
               my_headm%ich(:)=-1
               iii=0
+              ncr=0
               do ii=1,nchanl
                  m=ich(ii)
-                 channel_passive=iuse_rad(m)==-1 .or. iuse_rad(m)==0
-                 if (varinv(ii)>tiny_r_kind .and. channel_passive) then
+                 if (varinv(ii)>tiny_r_kind .and. channel_passive(m)) then
 
                     iii=iii+1
                     my_headm%res(iii)=tbc(ii)                 ! obs-ges innovation
                     my_headm%err2(iii)=one/error0(ii)**2      ! 1/(obs error)**2  (original uninflated error)
                     my_headm%raterr2(iii)=error0(ii)**2*varinv(ii) ! (original error)/(inflated error)
                     my_headm%icx(iii)=m                       ! channel index
+                    do mm=1,ii
+                      ncr=ncr+1
+                    end do
+                   
+                    my_headm%iccerr(iii)=ncr                     ! channel index
                     do k=1,npred
                        my_headm%pred(k,iii)=pred(k,ii)*upd_pred(k)*max(cld_rbc_idx(ii),cld_rbc_idx2(ii))
                     end do
@@ -2583,7 +2667,7 @@ contains
                     call nc_diag_metadata("Soil_Temperature",      sngl(surface(1)%soil_temperature)  ) ! soil temperature (K)
                     call nc_diag_metadata("Soil_Moisture",         sngl(surface(1)%soil_moisture_content) ) ! soil moisture
                     call nc_diag_metadata("Land_Type_Index",       surface(1)%land_type             ) ! surface land type
-                    call nc_diag_metadata("tsavg5",                missing                          ) ! SST first guess used for SST retrieval
+                    call nc_diag_metadata("tsavg5",                sngl(tsavg5)                     ) ! SST first guess used for SST retrieval
                     call nc_diag_metadata("sstcu",                 missing                          ) ! NCEP SST analysis at t            
                     call nc_diag_metadata("sstph",                 missing                          ) ! Physical SST retrieval             
                     call nc_diag_metadata("sstnv",                 missing                          ) ! Navy SST retrieval               
@@ -2614,11 +2698,16 @@ contains
 
                  call nc_diag_metadata("Sfc_Wind_Speed",        sngl(surface(1)%wind_speed)         )
                  call nc_diag_metadata("Cloud_Frac",            sngl(cld)                           )
+                 call nc_diag_metadata("cloudAmountInSegment",  sngl(cld)                           ) !emily 
+                 call nc_diag_metadata("amountSegmentCloudFree",sngl(100.0-cld)                     ) !emily 
                  call nc_diag_metadata("CTP",                   sngl(cldp)                          )
                  call nc_diag_metadata("CLW",                   sngl(clw_obs)                           )
                  call nc_diag_metadata("TPWC",                  sngl(tpwc_obs)                          )
                  call nc_diag_metadata("clw_obs",               sngl(clw_obs)                       )
                  call nc_diag_metadata("clw_guess",             sngl(clw_guess)                     )
+                 call nc_diag_metadata("factch6",               sngl(factch6)                     )
+                 call nc_diag_metadata("factch4",               sngl(factch4)                     )  !emily
+                 call nc_diag_metadata("qc4emiss",              sngl(qc4emiss_out)                )  !emily
 
                  if (nstinfo==0) then
                     data_s(itref,n)  = missing
@@ -2632,17 +2721,112 @@ contains
                  call nc_diag_metadata("SST_Cool_layer_tdrop",     sngl(data_s(idtc,n))              )       ! dt_cool at zob
                  call nc_diag_metadata("SST_dTz_dTfound",          sngl(data_s(itz_tr,n))            )       ! d(Tz)/d(Tr)
 
-                 call nc_diag_metadata("standard_deviation_clear_bt",  sngl(tb_obs_sdv(ich_diag(i)))) ! needed for seviri qc
-                 call nc_diag_metadata("Observation",                           sngl(tb_obs0(ich_diag(i)))  )     ! observed brightness temperature (K)
-                 call nc_diag_metadata("Obs_Minus_Forecast_unadjusted",         sngl(tbcnob(ich_diag(i)))  )     ! observed - simulated Tb with no bias correction (K)
-                 call nc_diag_metadata("Obs_Minus_Forecast_adjusted",           sngl(tbc0(ich_diag(i)  ))  )     ! observed - simulated Tb with bias corrrection (K)
-                 errinv = sqrt(varinv0(ich_diag(i)))
-                 call nc_diag_metadata("Inverse_Observation_Error",             sngl(errinv)          )
+                 call nc_diag_metadata("standard_deviation_clear_bt",        sngl(tb_obs_sdv(ich_diag(i))))  ! needed for seviri qc
+                 call nc_diag_metadata("Observation",                        sngl(tb_obs0(ich_diag(i)))   )  ! observed brightness temperature (K)
+                 call nc_diag_metadata("Obs_Minus_Forecast_unadjusted",      sngl(tbcnob(ich_diag(i)))    )  ! observed - simulated Tb with no bias correction (K)
+                 call nc_diag_metadata("Obs_Minus_Forecast_adjusted",        sngl(tbc0(ich_diag(i)  ))    )  ! observed - simulated Tb with bias corrrection (K)
+                 call nc_diag_metadata("TotalBias",                          sngl(totbc(ich_diag(i)  ))   )  ! total bias corrrection (K)  !emily
+                 call nc_diag_metadata("Forecast_unadjusted",                sngl(tsim(ich_diag(i)  ))    )  ! simulated Tb without bias corrrection (K)
+                 call nc_diag_metadata("Forecast_adjusted",                  sngl(tsim(ich_diag(i)  ) &
+                                                                               + totbc(ich_diag(i)  ))    )  ! simulated Tb with bias corrrection (K)
+             !   errinv = sqrt(varinv0(ich_diag(i)))  !orig
+                 errinv = sqrt(varinv(ich_diag(i)))   !emily 
+                 call nc_diag_metadata("Inverse_Observation_Error",          sngl(errinv)                 )  ! 1.0/observation error  
+                 call nc_diag_metadata("Input_Observation_Error", sngl(error0(ich_diag(i)))               )  ! Origial error assignment
+!>>emily
+                 if (iasi .or. cris .or. airs .or. avhrr) then
+                    errinv_tmp = sqrt(varinv_after_wavenum(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_wavenum", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_rangechk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_range", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_topo(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_topo", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_transmittop(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_transmittop", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_clddet(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_clddet", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_jsfcchk_land(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_jsfcchk_land", sngl(errinv_tmp)          )
+                    errinv_tmp = sqrt(varinv_after_nsstret(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_nsstret", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_jsfcchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_jsfcchk", sngl(errinv_tmp))
+                 endif
+
+                 if (amsua .or. atms) then
+                    errinv_tmp = sqrt(varinv_after_jsfcchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_jsfcchk", sngl(errinv_tmp) )
+                    errinv_tmp = sqrt(varinv_after_sdoei(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_sdoei", sngl(errinv_tmp)   )
+                    errinv_tmp = sqrt(varinv_sdoei(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_sdoei", sngl(errinv_tmp)         )
+                    errinv_tmp = sqrt(varinv_grosschk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_grosschk", sngl(errinv_tmp)      )
+                    errinv_tmp = sqrt(varinv_after_grosschk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_grosschk", sngl(errinv_tmp))
+                    output_tmp = cldeff_obs(ich_diag(i))
+                    call nc_diag_metadata("cldeff_obs", sngl(output_tmp))
+                    output_tmp = cldeff_fg(ich_diag(i))
+                    call nc_diag_metadata("cldeff_bkg", sngl(output_tmp))
+                 endif
+
+                 if (ssmis) then
+                    errinv_tmp = sqrt(varinv_after_grossroutinechk_over_ocean(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_grossroutinechk_ocean", sngl(errinv_tmp) )
+                    errinv_tmp = sqrt(varinv_after_grossroutinechk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_grossroutinechk", sngl(errinv_tmp) )
+                    errinv_tmp = sqrt(varinv_after_topo(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_topo", sngl(errinv_tmp) )
+                    errinv_tmp = sqrt(varinv_after_sfcchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_sfcchk", sngl(errinv_tmp) )
+                    errinv_tmp = sqrt(varinv_after_ch2chk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_ch2chk", sngl(errinv_tmp) )
+                    errinv_tmp = sqrt(varinv_after_scatteringchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_scatteringchk", sngl(errinv_tmp) )
+                    errinv_tmp = sqrt(varinv_after_jsfcchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_jsfcchk", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_nsstret(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_nsstret", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_grosschk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_grosschk", sngl(errinv_tmp))
+                    call nc_diag_metadata("SSMIS_ScatteringIndexPred9",              sngl(pred9)                           )
+                    call nc_diag_metadata("SSMIS_ScatteringIndexPred10",             sngl(pred10)                          )
+                    call nc_diag_metadata("SSMIS_ScatteringIndexPred11",             sngl(pred11)                          )
+                 endif
+
+                 if (seviri) then
+                    errinv_tmp = sqrt(varinv_after_sfcterrianchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_sfcterrianchk", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_rangechk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_range", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_topo(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_topo", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_transmittop(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_transmittop", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_clddet(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_clddet", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_stdchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_stdchk", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_grossroutinechk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_grossroutinechk", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_stdadj(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_stdadj", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_nsstret(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_nsstret", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_jsfcchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_jsfcchk", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_clrfracchk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_clrfracchk", sngl(errinv_tmp))
+                    errinv_tmp = sqrt(varinv_after_grosschk(ich_diag(i)))
+                    call nc_diag_metadata("Inverse_Observation_Error_after_grosschk", sngl(errinv_tmp))
+                 endif
+!<<emily
+
                  if (save_jacobian .and. allocated(idnames)) then
-                 call nc_diag_metadata("Observation_scaled",                    sngl(tb_obs(ich_diag(i)))  )     ! observed brightness temperature (K) scaled by R^{-1/2}
-                 call nc_diag_metadata("Obs_Minus_Forecast_adjusted_scaled",    sngl(tbc(ich_diag(i)  ))  )     ! observed - simulated Tb with bias corrrection (K) scaled by R^{-1/2}
+                 call nc_diag_metadata("Observation_scaled",                 sngl(tb_obs(ich_diag(i)))    )  ! observed brightness temperature (K) scaled by R^{-1/2}
+                 call nc_diag_metadata("Obs_Minus_Forecast_adjusted_scaled", sngl(tbc(ich_diag(i)  ))     )  ! observed - simulated Tb with bias corrrection (K) scaled by R^{-1/2}
                  errinv = sqrt(varinv(ich_diag(i)))
-                 call nc_diag_metadata("Inverse_Observation_Error_scaled",      sngl(errinv)          )
+                 call nc_diag_metadata("Inverse_Observation_Error_scaled",   sngl(errinv)                 )
                  endif
                  if (save_jacobian) then
                     j = 1

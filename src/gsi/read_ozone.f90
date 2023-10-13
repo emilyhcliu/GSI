@@ -154,6 +154,7 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
   integer(i_kind) JULIAN,IDAYYR,IDAYWK
   integer(i_kind) ikx
   integer(i_kind) decimal,binary(14),binary_mls(18)
+  integer(i_kind) :: iuseflag  !emily 1: used; -1: not used 
 
 
   integer(i_kind) itx,itt,ipoq7
@@ -220,7 +221,8 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
 !**************************************************************************
 ! Set constants.  Initialize variables
   rsat=999._r_kind
-  maxobs=1e6
+  maxobs=1e6  !orig
+! maxobs=1e7  !emily
   ilon=3
   ilat=4
   ipoq7=0
@@ -231,7 +233,8 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
   
   if (obstype == 'sbuv2' .or. obstype == 'ompsnp') then
 
-     nreal=9
+!    nreal=9    !orig
+     nreal=10   !emily
      open(lunin,file=trim(infile),form='unformatted')
      nmrecs=0
      call openbf(lunin,'IN',lunin)
@@ -272,6 +275,7 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
      endif
 
      read_loop1: do
+        iuseflag = 1   !emily
         call readsb(lunin,iret)
         if (iret/=0) then
            call readmg(lunin,subset,jdate,iret)
@@ -396,15 +400,20 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
         if (version8) then
            call ufbint(lunin,toq,1,1,iret,'SBUVTOQ')
            call ufbint(lunin,poq,1,1,iret,'SBUVPOQ')
-           if (toq/=0 .and. toq/=2) cycle read_loop1
-           if (poq/=0 .and. poq/=1 .and. poq/=ipoq7) cycle read_loop1
+!!emily           if (toq/=0 .and. toq/=2) cycle read_loop1
+!!emily           if (poq/=0 .and. poq/=1 .and. poq/=ipoq7) cycle read_loop1
+!>>emily
+           if (toq/=0 .and. toq/=2) iuseflag = -1 
+           if (poq/=0 .and. poq/=1 .and. poq/=ipoq7) iuseflag = -1 
+!<<emily
         endif
 
 !       Check ozone layer values.  If any layer value is bad, toss entire profile
         do k=1,nloz
-           if (poz(k)>badoz) cycle read_loop1
+!!emily           if (poz(k)>badoz) cycle read_loop1
+           if (poz(k)>badoz) iuseflag = -1 
         end do
-     
+
 !       Write ozone record to output file
         ndata=min(ndata+1,maxobs)
         nodata=nodata+nloz+1
@@ -417,8 +426,10 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
         ozout(7,ndata)=toq                ! total ozone error flag
         ozout(8,ndata)=poq                ! profile ozone error flag
         ozout(9,ndata)=solzen             ! solar zenith angle
+        ozout(10,ndata)=iuseflag          ! solar zenith angle  !emily
         do k=1,nloz+1
-           ozout(k+9,ndata)=poz(k)
+!          ozout(k+9,ndata)=poz(k)        !orig
+           ozout(k+10,ndata)=poz(k)       !emily
         end do
 
 !       Loop back to read next profile
@@ -626,6 +637,8 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
 !    Set dependent variables and allocate arrays
 !    nreal=14   !orig
      nreal=15   !emily  (add AFBO)
+     nreal=16   !emily  (add iuseflag)
+     iuseflag=1 !emily
      nloz=0
      nchanl=1
      nozdat=nreal+nchanl
@@ -642,6 +655,7 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
      ihh=0
 
      read_loop2: do
+        iuseflag = 1   
         call readsb(lunin,iret)
         if (iret/=0) then
            call readmg(lunin,subset,jdate,iret)
@@ -703,7 +717,8 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
 
 !       extract total ozone
         call ufbint(lunin,totoz,1,1,iret,'OZON')
-        if (totoz > badoz ) cycle read_loop2
+        if (totoz > badoz ) iuseflag = -1    !emily
+!!emily        if (totoz > badoz ) cycle read_loop2
 
 !    QC for omi_aura
    if (obstype == 'omi') then
@@ -711,18 +726,22 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
 !       Bit 10 in TOQF represents row anomaly. 
         decimal=int(hdrozo2(6))
         call dec2bin(decimal,binary,14)
-        if (binary(10) == 1 ) cycle read_loop2
+        if (binary(10) == 1 ) iuseflag = -1  !emily 
+!!emily        if (binary(10) == 1 ) cycle read_loop2
 
 !    remove the bad scan position data: fovn beyond 25
-     if (hdrozo2(7) >=25.0_r_double) cycle read_loop2
+     if (hdrozo2(7) >=25.0_r_double) iuseflag = -1   !emily
+!!emily     if (hdrozo2(7) >=25.0_r_double) cycle read_loop2
 
    end if
 !       only accept flag 0 1, flag 2 is high SZA data which is not used for now
         toq=hdrozo2(5)
-        if (toq/=0 .and. toq/=1) cycle read_loop2
+        if (toq/=0 .and. toq/=1) iuseflag = -1  !emily 
+!!emily        if (toq/=0 .and. toq/=1) cycle read_loop2
    
 !       remove the data in which the C-pair algorithm ((331 and 360 nm) is used. 
-        if (hdrozo2(8) == 3_r_double .or. hdrozo2(8) == 13_r_double) cycle read_loop2
+        if (hdrozo2(8) == 3_r_double .or. hdrozo2(8) == 13_r_double) iuseflag = -1   !emily
+!!emily        if (hdrozo2(8) == 3_r_double .or. hdrozo2(8) == 13_r_double) cycle read_loop2
 
 !       thin OMI/OMPS-NM(or TC8) data
 
@@ -747,7 +766,8 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
         ozout(7,itx)=hdrozo2(5)         ! total ozone quality code
         ozout(8,itx)=hdrozo(10)         ! solar zenith angle
         if (obstype == 'omi') then
-           ozout(9,itx)=binary(10)         ! row anomaly flag
+!          ozout(9,itx)=binary(10)         ! row anomaly flag  !orig
+           ozout(9,itx)=hdrozo2(6)         ! total ozone quality flag  !emily
         end if
         ozout(10,itx)=hdrozo2(1)        !  cloud amount
         ozout(11,itx)=hdrozo2(4)        !  vzan
@@ -755,7 +775,8 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
         ozout(13,itx)=hdrozo2(3)        !  ascending/descending
         ozout(14,itx)=hdrozo2(7)        !  scan position
         ozout(15,itx)=hdrozo2(8)        !  AFBO  !emily 
-        ozout(16,itx)=totoz                      !emily
+        ozout(16,itx)=iuseflag                   !emily
+        ozout(17,itx)=totoz                      !emily
 !orig   ozout(15,itx)=totoz
 
 !       End of loop over observations
@@ -1255,7 +1276,6 @@ subroutine read_ozone(nread,ndata,nodata,jsatid,infile,gstime,lunout, &
         ndata=kk
         nodata=ndata
      endif
-
 !    Write header record and data to output file for further processing
      call count_obs(ndata,nozdat,ilat,ilon,ozout,nobs)
      write(lunout) obstype,sis,nreal,nchanl,ilat,ilon
