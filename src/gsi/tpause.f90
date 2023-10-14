@@ -162,7 +162,7 @@ subroutine tpause(mype,method)
            end do
            pvort(1) = pvort(2)
            pvort(nsig) = pvort(nsig-1)
-           
+
 !          Locate tropopause
            ifound_pv=0; ifound_oz=0
            itrp_pv=nsig; itrp_oz=nsig
@@ -185,6 +185,7 @@ subroutine tpause(mype,method)
            end do
            
 !          Merge pv and ozone tropopause levels between 20 and 40 deg latitude
+           wgt1 = 0.0_r_kind 
            if (slatd(i) >= r40 ) then
               itrop_k = itrp_pv
            elseif (slatd(i) >= r20) then
@@ -197,6 +198,7 @@ subroutine tpause(mype,method)
            trop_pv(i,j)   = prs(itrp_pv)*r0_01 !hPa
            trop_oz(i,j)   = prs(itrp_oz)*r0_01 !hPa
            trop_pvoz(i,j) = prs(itrop_k)*r0_01 !hPa
+
         end do
      end do
   

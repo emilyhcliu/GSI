@@ -149,9 +149,9 @@ subroutine setupbend(obsLL,odiagLL, &
   use guess_grids, only: ges_lnprsi,hrdifsig,geop_hgti,nfldsig
   use guess_grids, only: ges_lnprsl,ges_prsi,geop_hgtl
   use guess_grids, only: nsig_ext,gpstop,commgpstop,commgpserrinf
-!> xuanli
+!
   use guess_grids, only: ges_tsen
-!< xuanli
+!
   use gridmod, only: nsig
   use gridmod, only: get_ij,latlon11
   use constants, only: fv,n_a,n_b,n_c,deg2rad,tiny_r_kind,r0_01,r18,r61,r63,r10000
@@ -232,11 +232,10 @@ subroutine setupbend(obsLL,odiagLL, &
   real(r_kind) hobb
   real(r_kind),dimension(4) :: w4,dw4,dw4_TL
  
-!> xuanli 
   integer(i_kind) ier,ilon,ilat,ihgt,igps,itime,ikx,iuse, &
                   iprof,ipctc,iroc,isatid,iptid,ilate,ilone,ioff,igeoid,iqfro
   integer(i_kind) iascd, iazm, iconstid, isiid, iogce, iref
-!< xuanli
+
   integer(i_kind) i,j,k,kk,mreal,nreal,jj,ikxx,ibin
   integer(i_kind) mm1,nsig_up,ihob,istatus,nsigstart
   integer(i_kind) kprof,istat,k1,k2,nobs_out,top_layer_SR,bot_layer_SR,count_SR
@@ -247,7 +246,7 @@ subroutine setupbend(obsLL,odiagLL, &
   integer(i_kind) :: iz, t_ind, q_ind, p_ind, nnz, nind
 
   real(r_kind),dimension(3,nsig+nsig_ext) :: q_w,q_w_tl
-! xuanli correct the dimension of hges 
+!  correct the dimension of hges 
 !  real(r_kind),dimension(nsig) :: hges,irefges,zges,dhdt,dhdp
   real(r_kind),dimension(nsig) :: irefges,zges,dhdt,dhdp
   real(r_kind),dimension(nsig+1) :: hges
@@ -275,12 +274,10 @@ subroutine setupbend(obsLL,odiagLL, &
   real(r_kind),allocatable,dimension(:,:,:,:) :: ges_tv
   real(r_kind),allocatable,dimension(:,:,:,:) :: ges_q
 
-!> xuanli
   real(r_kind),dimension(nsig,  nobs)         :: Tsen,Tvir,sphm,hgtl,prslnl
   real(r_kind),dimension(nsig+1,nobs)         :: hgti,prslni
   integer(i_kind),dimension(nobs)             :: qc_superr, qc_layer, qc_ddnj
   integer(i_kind),dimension(nobs)             :: qc_stat,qc_largeBA,qc_metop
-!< xuanli
 
   type(obsLList),pointer,dimension(:):: gpshead
   logical:: commdat
@@ -346,7 +343,7 @@ subroutine setupbend(obsLL,odiagLL, &
   ilone=14     ! index of earth relative longitude (degrees)
   ilate=15     ! index of earth relative latitude (degrees)
   igeoid=16    ! index of geoid undulation (a value per profile, m) 
-!> xuanli
+!
   iqfro=17     ! index of qfro (integer)
   iascd=18     ! index of ascending flag (integer)
   iazm=19      ! index of azimuth angle 
@@ -360,7 +357,7 @@ subroutine setupbend(obsLL,odiagLL, &
   qc_metop(:) = 0
   qc_layer(:) = 0
   qc_ddnj(:) = 0
-!< xuanli
+  kprof = 0    ! initialize kprof otherwise it is assigned as 787086608
 
 ! Intialize variables
   nsig_up=nsig+nsig_ext ! extend nsig_ext levels above interface level nsig
@@ -378,8 +375,8 @@ subroutine setupbend(obsLL,odiagLL, &
   allocate(ddnj(grids_dim),grid_s(grids_dim),ref_rad_s(grids_dim)) 
 
 ! Allocate arrays for output to diagnostic file
-!  mreal=22  ! xuanli
-  mreal=34   ! xuanli
+!  mreal=22  ! 
+  mreal=34   ! more arrays
   nreal=mreal
   if (lobsdiagsave) nreal=nreal+4*miter+1
   if (save_jacobian) then
@@ -569,6 +566,7 @@ subroutine setupbend(obsLL,odiagLL, &
         do k=nsigstart,1,-1 
 !       check for model SR layer at obs location
            grad_mod=1000.0_r_kind*(nrefges(k+1,i)-nrefges(k,i))/(rges(k+1,i)-rges(k,i))
+
            if (abs(grad_mod)>= half*crit_grad) then  ! SR - likely, to be used in obs SR qc
               qc_layer_SR=.true.   !SR-likely layer detected
            endif
@@ -620,10 +618,9 @@ subroutine setupbend(obsLL,odiagLL, &
      rdiagbuf(2,i)         = data(iprof,i)      ! profile identifier
      rdiagbuf(3,i)         = data(ilate,i)      ! lat in degrees
      rdiagbuf(4,i)         = data(ilone,i)      ! lon in degrees
-!> xuanli: modified imph in the diag file. In jedi: imph=impp-roc-geoid
+!> modified imph in the diag file. In jedi: imph=impp-roc-geoid
      rdiagbuf(7,i)         = tpdpres(i)-rocprof ! impact height in meters
 !    rdiagbuf(7,i)         = tpdpres(i)-rocprof-unprof  ! impact height in meters -- defination in JEDI
-!< xuanli
 
 !    rdiagbuf(7,i)         = tpdpres(i)         ! impact parameter in meters
      rdiagbuf(8,i)         = dtime-time_offset  ! obs time (hours relative to analysis time)
@@ -633,7 +630,6 @@ subroutine setupbend(obsLL,odiagLL, &
      rdiagbuf(17,i)        = data(igps,i)       ! bending angle observation (radians)
      rdiagbuf(19,i)        = hob                ! model vertical grid (interface) if monotone grid
      rdiagbuf(22,i)        = 1.e+10_r_kind      ! spread (filled in by EnKF)
-!> xuanli
      rdiagbuf(23,i)         = tpdpres(i)        ! impact parameter in meters
      rdiagbuf(24,i)         = data(ipctc,i)     ! input bufr qc - index of per cent confidence
      rdiagbuf(25,i)         = data(iptid,i)     ! transmitter occ id    
@@ -646,7 +642,6 @@ subroutine setupbend(obsLL,odiagLL, &
      rdiagbuf(32,i)         = data(isiid,i)     ! occulting satellite 
      rdiagbuf(33,i)         = data(iogce,i)     ! Identification of processing center
      rdiagbuf(34,i)         = data(iref,i)      ! refractivity
-!< xuanli -
 
      if(ratio_errors(i) > tiny_r_kind)  then ! obs inside model grid
 
@@ -823,11 +818,11 @@ subroutine setupbend(obsLL,odiagLL, &
               ddnj(j)=dot_product(dw4,nrefges(ihob-1:ihob+2,i))!derivative (dN/dx)_j                                                                      
 
               if(ddnj(j)>zero) then
-!> xuanli -- set dbend, rdiagbuf(5), rdiagbuf(17) as JEDI missing
+!-- set dbend, rdiagbuf(5) as JEDI missing
                  dbend=-3.368795e+38
                  rdiagbuf( 5,i) = -3.368795e+38
-                 rdiagbuf( 17,i) = -3.368795e+38
-!< xuanli
+!                 rdiagbuf( 17,i) = -3.368795e+38
+!
                  qcfail(i)=.true.
                  qc_ddnj(i)=1
                  data(ier,i) = zero
@@ -854,11 +849,11 @@ subroutine setupbend(obsLL,odiagLL, &
          end do intloop
 
          if (obs_check) then      ! reject observation
-!> xuanli -- set dbend, rdiagbuf(5), rdiagbuf(17) as JEDI missing
+! -- set dbend, rdiagbuf(5) as JEDI missing
             rdiagbuf( 5,i) = -3.368795e+38 
-            rdiagbuf( 17,i) = -3.368795e+38
+!            rdiagbuf( 17,i) = -3.368795e+38
             dbend = -3.368795e+38
-!< xuanli
+! 
             qcfail(i)=.true.
             data(ier,i) = zero
             ratio_errors(i) = zero
@@ -881,11 +876,11 @@ subroutine setupbend(obsLL,odiagLL, &
 
 !        Remove very large simulated values
          if(dbend > 0.05_r_kind) then
-!> xuanli -- set dbend, rdiagbuf(5), rdiagbuf(17) as JEDI missing
+! -- set dbend, rdiagbuf(5) as JEDI missing
             rdiagbuf( 5,i) = -3.368795e+38
-            rdiagbuf( 17,i) = -3.368795e+38
+!            rdiagbuf( 17,i) = -3.368795e+38
             dbend = -3.368795e+38
-!< xuanli
+! 
            data(ier,i) = zero
            ratio_errors(i) = zero
            qcfail(i)=.true.
@@ -1040,13 +1035,12 @@ subroutine setupbend(obsLL,odiagLL, &
         if(qcfail(i))                rdiagbuf(10,i) = four !modified in genstats due to toss_gps_sub
         if(qcfail_loc(i) == one)     rdiagbuf(10,i) = one
         if(qcfail_high(i) == one)    rdiagbuf(10,i) = two
-        if(qc_superr(i) == 1)        rdiagbuf(10,i) = 7 !xuanli to print out SR
-        !if(qc_layer(i) == 1)         rdiagbuf(10,i) = 8 !xuanli to print out SR
-        if(qc_ddnj(i) == 1)          rdiagbuf(10,i) = 9 !xuanli to print out SR
-        if(qc_stat(i) == 1)          rdiagbuf(10,i) = 10 !xuanli to print out SR
-        if(qc_largeBA(i) == 1)       rdiagbuf(10,i) = 11 !xuanli to print out SR
-        if(qc_metop(i) == 1)         rdiagbuf(10,i) = 12 !xuanli to print out SR
-       
+        if(qc_superr(i) == 1)        rdiagbuf(10,i) = 7 ! print out SR
+        !if(qc_layer(i) == 1)        rdiagbuf(10,i) = 8 ! print out SR2, this is marked in genstats_gps
+        if(qc_stat(i) == 1)          rdiagbuf(10,i) = 10 ! print out cutoff
+        if(qc_ddnj(i) == 1)          rdiagbuf(10,i) = 9 ! print out ddnj>0
+        if(qc_largeBA(i) == 1)       rdiagbuf(10,i) = 11 ! print out large BA
+        if(qc_metop(i) == 1)         rdiagbuf(10,i) = 12 ! print out metop 8 km
 
         if(muse(i)) then                    ! modified in genstats_gps due to toss_gps_sub
            rdiagbuf(12,i) = one             ! minimization usage flag (1=use, -1=not used)

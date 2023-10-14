@@ -529,7 +529,6 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
               rat_err2=zero
               if(luse(i))stats_oz(2,j) = stats_oz(2,j) + one ! number of obs tossed
            endif
-           write(6,*)'emily checking iuseflag = ', data(iuseflag,i), varinv3(k)
 !          Check scan position errors in ompstc8
            if(obstype == "ompstc8") then
              if(data(ifovn,i) == 1 .or. data(ifovn,i) == 2 .or. &
@@ -659,6 +658,8 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
                  else
                     call nc_diag_metadata("Time",sngl(dtime-time_offset))
                  endif
+!                if (obstype == 'ompstc8' .or. obstype == 'omi')) &  !emily 
+                 call nc_diag_metadata("Total_Ozone_Quality_Code", sngl(ierror_toq )) !emily
                  call nc_diag_metadata("Total_Ozone_Error_Flag", sngl(ierror_toq ))
                  call nc_diag_metadata("Profile_Ozone_Error_Flag", sngl(ierror_poq ))
                  call nc_diag_metadata_to_single("Reference_Pressure",(pobs(k)*r100))
@@ -684,7 +685,8 @@ subroutine setupozlay(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
 !orig               call nc_diag_metadata_to_single("Row_Anomaly_Index",(data(itoqf,i))  )
                     call nc_diag_metadata("Total_Ozone_Quality_Flag", sngl(data(itoqf,i))  )
                  else
-                    call nc_diag_metadata_to_single("Row_Anomaly_Index",(rmiss)  )
+                    call nc_diag_metadata("Total_Ozone_Quality_Flag",  sngl(rmiss)  )  !emily
+!orig               call nc_diag_metadata_to_single("Row_Anomaly_Index",(rmiss)  )
                  endif
 !>>emily
                  if (obstype == 'omi' .or. obstype == 'ompstc8' .or. obstype == 'ompsnm') then
@@ -1225,8 +1227,6 @@ subroutine setupozlev(obsLL,odiagLL,lunin,mype,stats_oz,nlevs,nreal,nobs,&
   real(r_kind),dimension(nsig)::ozgestmp   ! GeoVaLs for JEDI/UFO
   real(r_single),dimension(ireal,nobs):: diagbuf
   real(r_single),allocatable,dimension(:,:,:)::rdiagbuf
-  real(r_kind),dimension(nsig+1)::prsitmp
-  real(r_kind),dimension(nsig)::ozgestmp
 
   integer(i_kind) i,ii,jj,iextra,ibin
   integer(i_kind) k1,k2,k,j,idia,irdim1,ioff0,ioff1

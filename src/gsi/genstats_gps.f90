@@ -64,7 +64,7 @@ module m_gpsStats
       integer(i_kind) :: idv,iob	      ! device id and obs index for sorting
       real   (r_kind) :: elat, elon      ! earth lat-lon for redistribution
       !real   (r_kind) :: dlat, dlon      ! earth lat-lon for redistribution
-      !> xuanli
+      !
       real(r_kind),dimension(:),pointer :: tsenges => NULL()
       real(r_kind),dimension(:),pointer :: tvirges => NULL()
       real(r_kind),dimension(:),pointer :: sphmges => NULL()
@@ -72,7 +72,7 @@ module m_gpsStats
       real(r_kind),dimension(:),pointer :: hgtiges => NULL()
       real(r_kind),dimension(:),pointer :: prslges => NULL()
       real(r_kind),dimension(:),pointer :: prsiges => NULL()
-      !< xuanli
+      !
     end type gps_all_ob_type
 
     type gps_all_ob_head
@@ -436,10 +436,10 @@ subroutine genstats_gps(bwork,awork,toss_gps_sub,conv_diagsave,mype)
         end do
      END DO
      if(icnt > 0)then
-!> xuanli
+!
 !       nreal =22
         nreal =34
-!< xuanli
+!
         ioff  =nreal
         if (lobsdiagsave) nreal=nreal+4*miter+1
         if (save_jacobian) then
@@ -450,8 +450,6 @@ subroutine genstats_gps(bwork,awork,toss_gps_sub,conv_diagsave,mype)
         allocate(cdiag(icnt),sdiag(nreal,icnt))
      end if
   endif
-
-
 
 ! Loop over data to apply final qc, superobs factors, accumulate
 ! statistics and (optionally) load diagnostic output arrays
@@ -546,6 +544,7 @@ subroutine genstats_gps(bwork,awork,toss_gps_sub,conv_diagsave,mype)
           elev         = gps_allptr%rdiag(7)
           dobs         = gps_allptr%rdiag(17)
           if  (toss_gps(kprof) > zero .and. (dobs == toss_gps(kprof) .or. elev < dobs_height(kprof))) then ! SR from obs
+
               if(ratio_errors*data_ier > tiny_r_kind) then ! obs was good
                  if (luse) then
                     if(conv_diagsave) then
@@ -717,7 +716,6 @@ subroutine genstats_gps(bwork,awork,toss_gps_sub,conv_diagsave,mype)
     endif
   endif
 
-
 ! Destroy arrays holding gps data
   call destroy_genstats_gps
 contains
@@ -778,15 +776,17 @@ subroutine contents_netcdf_diag_
            obstype    = gps_allptr%rdiag(1) 
            obssubtype = gps_allptr%rdiag(2)
            call nc_diag_metadata("Observation_Type",                      obstype                      )
-           call nc_diag_metadata("Observation_Subtype",                   obssubtype                   )
+! rename it to be consistent with GMAO gsi_ncdiag
+!          call nc_diag_metadata("Observation_Subtype",                   obssubtype                   )
            call nc_diag_metadata("record_number",                         obssubtype                   )
            call nc_diag_metadata_to_single("Latitude",                    gps_allptr%rdiag(3)          )
            call nc_diag_metadata_to_single("Longitude",                   gps_allptr%rdiag(4)          )
            call nc_diag_metadata_to_single("Incremental_Bending_Angle",   gps_allptr%rdiag(5)          )
 !          call nc_diag_metadata_to_single("Pressure",                    gps_allptr%rdiag(6)          )  !orig
            call nc_diag_metadata_to_single("Pressure",                    gps_allptr%rdiag(6)*100.0    )
+! rename the variable as impact_height
 !          call nc_diag_metadata_to_single("Height",                      gps_allptr%rdiag(7)          )
-           call nc_diag_metadata_to_single("Impact_Height",               gps_allptr%rdiag(7))         )
+           call nc_diag_metadata_to_single("Impact_Height",               gps_allptr%rdiag(7)          )
            call nc_diag_metadata_to_single("Time",                        gps_allptr%rdiag(8)          )
 !          call nc_diag_metadata_to_single("Model_Elevation",             gps_allptr%rdiag(9)          )  !orig
            call nc_diag_metadata_to_single("surface_geopotential_height", gps_allptr%rdiag(9)          )
@@ -804,7 +804,7 @@ subroutine contents_netcdf_diag_
            call nc_diag_metadata_to_single("GPS_Type",                    gps_allptr%rdiag(20)         )
            call nc_diag_metadata_to_single("Temperature_at_Obs_Location", gps_allptr%rdiag(18)         )
            call nc_diag_metadata_to_single("Specific_Humidity_at_Obs_Location",gps_allptr%rdiag(21)    )
-!> xuanli
+
            call nc_diag_metadata("impact_parameter",                           sngl(gps_allptr%rdiag(23))   )
            call nc_diag_metadata("pccf",                                       sngl(gps_allptr%rdiag(24))   )
            call nc_diag_metadata("reference_sat_id",                           int(gps_allptr%rdiag(25))   )
@@ -818,7 +818,6 @@ subroutine contents_netcdf_diag_
            call nc_diag_metadata("process_center",                              int(gps_allptr%rdiag(33))   )
            call nc_diag_metadata("atmospheric_refractivity",                   sngl(gps_allptr%rdiag(34))   )
            call nc_diag_metadata("surface_altitude",                           sngl(gps_allptr%rdiag(9))    )
-!< xuanli
 
            if (save_jacobian) then
               call readarray(dhx_dx, gps_allptr%rdiag(ioff+1:nreal))
@@ -826,7 +825,6 @@ subroutine contents_netcdf_diag_
               call nc_diag_data2d("Observation_Operator_Jacobian_endind", dhx_dx%end_ind(1:dhx_dx%nind))
               call nc_diag_data2d("Observation_Operator_Jacobian_val", real(dhx_dx%val(1:dhx_dx%nnz),r_single))
            endif
-!> xuanli
               call nc_diag_data2d("atmosphere_pressure_coordinate", sngl(gps_allptr%prslges))
               call nc_diag_data2d("atmosphere_pressure_coordinate_interface", sngl(gps_allptr%prsiges))
               call nc_diag_data2d("air_temperature", sngl(gps_allptr%tsenges))
@@ -834,9 +832,6 @@ subroutine contents_netcdf_diag_
               call nc_diag_data2d("specific_humidity", sngl(gps_allptr%sphmges))
               call nc_diag_data2d("geopotential_height", sngl(gps_allptr%hgtlges))
               call nc_diag_data2d("geopotential_height_levels", sngl(gps_allptr%hgtiges))
-!< xuanli
-
-
 
 !           call nc_diag_data2d("T_Jacobian",                              gps_allptr%mmpoint%jac_t             )
            if (lobsdiagsave) then

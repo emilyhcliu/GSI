@@ -213,7 +213,6 @@ subroutine read_satwnd(nread,ndata,nodata,infile,obstype,lunout,gstime,twind,sis
   
   real(r_double),dimension(13):: hdrdat
   real(r_double),dimension(4):: obsdat
-  real(r_double),dimension(2) :: hdrdat_test
   real(r_double),dimension(2) :: hdrdat_test,hdrdat_005099
   real(r_double),dimension(3,5) :: heightdat
   real(r_double),dimension(6,4) :: derdwdat

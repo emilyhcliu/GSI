@@ -138,18 +138,16 @@ subroutine read_gps(nread,ndata,nodata,infile,lunout,obstype,twind, &
 
   real(r_kind),allocatable,dimension(:,:):: cdata_all
 
-!> xuanli 
+ 
 !  integer(i_kind),parameter:: n1ahdr=10
   integer(i_kind),parameter:: n1ahdr=13
-!< xuanli
+
   real(r_double),dimension(n1ahdr):: bfr1ahdr
   real(r_double),dimension(50,maxlevs):: data1b
   real(r_double),dimension(50,maxlevs):: data2a
   real(r_double),dimension(maxlevs):: nreps_this_ROSEQ2
 
-!> xuanli
   real(r_kind):: azm_ang, sat_ascd, sat_constid, siid, ogce
-!< xuanli
  
   data lnbufr/10/
 !  data hdr1a / 'YEAR MNTH DAYS HOUR MINU PCCF ELRC SAID PTID GEODU' / 
@@ -309,7 +307,7 @@ subroutine read_gps(nread,ndata,nodata,infile,lunout,obstype,twind, &
            endif
         endif
 
-!> xuanli ascending flag: when qfro bit3 is set, occultation is ascending 
+! ascending flag: when qfro bit3 is set, occultation is ascending 
 !                                   bit3 is clear, occultation is descending 
        sat_ascd = 0.0   
        call upftbv(lnbufr,nemo,qfro,mxib,ibit,nib)
@@ -318,7 +316,6 @@ subroutine read_gps(nread,ndata,nodata,infile,lunout,obstype,twind, &
             if(ibit(i) .eq. 3) sat_ascd=1.0
           enddo
         endif
-!< xuanli
 
 ! Read bending angle information
 ! Get the number of occurences of sequence ROSEQ2 in this subset
@@ -392,7 +389,8 @@ subroutine read_gps(nread,ndata,nodata,infile,lunout,obstype,twind, &
            good=.true.
            if((abs(rlat)>90._r_kind).or.(abs(rlon)>r360).or.(height<=zero)) then
               good=.false.
-           else if (ref_obs) then
+           endif
+           if (ref_obs) then
               if ((ref>=1.e+9_r_kind).or.(ref<=zero).or.(height>=1.e+9_r_kind)) then
                  good=.false.
               endif
@@ -463,7 +461,7 @@ subroutine read_gps(nread,ndata,nodata,infile,lunout,obstype,twind, &
               cdata_all(14,ndata)= dlon_earth_deg  ! earth relative longitude (degrees)
               cdata_all(15,ndata)= dlat_earth_deg  ! earth relative latitude (degrees)
               cdata_all(16,ndata)= geoid           ! geoid undulation (m)
-!> xuanli
+
               cdata_all(17,ndata)= qfro            ! qfro
               cdata_all(18,ndata)= sat_ascd        ! ascending flag
               cdata_all(19,ndata)= azm_ang         ! azimuth angle
@@ -471,7 +469,7 @@ subroutine read_gps(nread,ndata,nodata,infile,lunout,obstype,twind, &
               cdata_all(21,ndata)= siid            ! occulting satellite 
               cdata_all(22,ndata)= ogce            ! Identification of originating/generating centre 
               cdata_all(23,ndata)= ref             ! refractivity obs (units of N)
-!< xuanli
+
            else
               notgood = notgood + 1
            end if
@@ -497,9 +495,8 @@ subroutine read_gps(nread,ndata,nodata,infile,lunout,obstype,twind, &
   write(6,*)'READ_GPS:  # bad or missing data=', notgood
   do i=1,ngpsro_type
      if (nmrecs_id(i)>0) &
-          write(6,1021)'READ_GPS:  LEO_id,nprof_gps = ',gpsro_itype(i),nmrecs_id(i)
+          write(6,1020)'READ_GPS:  LEO_id,nprof_gps = ',gpsro_itype(i),nmrecs_id(i)
   end do
-1021 format(a31,i6,i6)
   write(6,1020)'READ_GPS:  ref_obs,nprof_gps= ',ref_obs,nprof_gps
 1020 format(a31,L,i6)
 

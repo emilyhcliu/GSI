@@ -2699,16 +2699,16 @@ contains
 
                  call nc_diag_metadata_to_single("Sfc_Wind_Speed",surface(1)%wind_speed          )
                  call nc_diag_metadata_to_single("Cloud_Frac",cld                            )
-                 call nc_diag_metadata_to_single("cloudAmountInSegment",  sngl(cld)                           ) !emily 
-                 call nc_diag_metadata_to_single("amountSegmentCloudFree",sngl(100.0-cld)                     ) !emily 
+                 call nc_diag_metadata_to_single("cloudAmountInSegment",  cld                                 ) !emily 
+                 call nc_diag_metadata_to_single("amountSegmentCloudFree",100.0-cld                           ) !emily 
                  call nc_diag_metadata_to_single("CTP",cldp                            )
                  call nc_diag_metadata_to_single("CLW",clw_obs                             )
                  call nc_diag_metadata_to_single("TPWC",tpwc_obs                            )
                  call nc_diag_metadata_to_single("clw_obs",clw_obs                         )
                  call nc_diag_metadata_to_single("clw_guess",clw_guess                       )
-                 call nc_diag_metadata_to_single("factch6",               sngl(factch6)                     )
-                 call nc_diag_metadata_to_single("factch4",               sngl(factch4)                     )  !emily
-                 call nc_diag_metadata_to_single("qc4emiss",              sngl(qc4emiss_out)                )  !emily
+                 call nc_diag_metadata_to_single("factch6",               factch6                     )
+                 call nc_diag_metadata_to_single("factch4",               factch4                     )  !emily
+                 call nc_diag_metadata_to_single("qc4emiss",              qc4emiss_out                )  !emily
 
                  if (nstinfo==0) then
                     data_s(itref,n)  = missing

@@ -269,7 +269,7 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   real(r_kind) tges
   real(r_kind) obserror,ratio,val2,obserrlm,ratiosfc
   real(r_kind) residual,ressw2,scale,ress,ratio_errors,tob,ddiff
-  real(r_kind) val,valqc,dlon,dlat,dtime,dpres,error,prest,rwgt,var_jb
+  real(r_kind) val,valqc,dlon,dlat,dtime,dpres,error,prest,rwgt,var_jb,obserr0 !emily
   real(r_kind) errinv_input,errinv_adjst,errinv_final
   real(r_kind) err_input,err_adjst,err_final,tfact
   real(r_kind) cg_t,cvar,wgt,rat_err2,qcgross
@@ -302,7 +302,7 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   integer(i_kind) idomsfc,iskint,iff10,isfcr
   integer(i_kind) ibb,ikk,idddd
   integer(i_kind) kk, isli !emily
-  integer(i_kind) water_frac,land_frac,ice_frac !emily
+  integer(i_kind) water_frac,land_frac,ice_frac, snow_frac !emily
 
   integer(i_kind),dimension(nobs):: buddyuse
 
@@ -546,6 +546,7 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
         dlon=data(ilon,i)
         dpres=data(ipres,i)
         error=data(ier2,i)
+        obserr0=data(ier2,i) !emily
         rstation_id     = data(id,i)
         prest=r10*exp(dpres)     ! in mb
         sfctype=(itype>179.and.itype<190).or.(itype>=192.and.itype<=199)
@@ -1788,37 +1789,43 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 
   real(r_kind),dimension(miter) :: obsdiag_iuse
 
-    call nc_diag_metadata("Station_ID",              station_id             )
-    call nc_diag_metadata("Observation_Class",       obsclass               )
-    call nc_diag_metadata("Observation_Type",        ictype(ikx)            )
-    call nc_diag_metadata("Observation_Subtype",     icsubtype(ikx)         )
-    call nc_diag_metadata_to_single("Latitude",data(ilate,i))
-    call nc_diag_metadata_to_single("Longitude",data(ilone,i))
+    call nc_diag_metadata("Station_ID",              station_id              )
+    call nc_diag_metadata("Observation_Class",       obsclass                )
+    call nc_diag_metadata("Observation_Type",        ictype(ikx)             )
+    call nc_diag_metadata("Observation_Subtype",     icsubtype(ikx)          )
+ 
+    call nc_diag_metadata_to_single("Latitude",         data(ilate,i)        )
+    call nc_diag_metadata_to_single("Longitude",        data(ilone,i)        )
 ! this is the obs height after being interpolated to the model (=model height)
-    call nc_diag_metadata_to_single("Station_Elevation",data(istnelv,i))
-    call nc_diag_metadata_to_single("Pressure",prest)
+    call nc_diag_metadata_to_single("Station_Elevation",data(istnelv,i)      )
+    call nc_diag_metadata_to_single("Pressure",         prest                )
 ! this is the original obs height (= stn elevation,  before being interpolated)
-    call nc_diag_metadata_to_single("Height",data(iobshgt,i))
-    call nc_diag_metadata_to_single("Time",dtime,time_offset,'-')
-    call nc_diag_metadata_to_single("Prep_QC_Mark",data(iqc,i))
-    call nc_diag_metadata_to_single("Setup_QC_Mark",data(iqt,i))
-    call nc_diag_metadata_to_single("Prep_Use_Flag",data(iuse,i))
+    call nc_diag_metadata_to_single("Height",           data(iobshgt,i)      )
+    call nc_diag_metadata_to_single("ObserrFactorDup",  sqrt(dup(i))         ) !emily
+    call nc_diag_metadata_to_single("Time",             dtime,time_offset,'-')
+    call nc_diag_metadata_to_single("deltObsTime",      data(itime,i)        ) !emily_test
+    call nc_diag_metadata_to_single("Prep_QC_Mark",     data(iqc,i)          )
+    call nc_diag_metadata_to_single("Setup_QC_Mark",    data(iqt,i)          )
+    call nc_diag_metadata_to_single("Prep_Use_Flag",    data(iuse,i)         )
+
     if(muse(i)) then
-       call nc_diag_metadata("Analysis_Use_Flag",    sngl(one)              )
+       call nc_diag_metadata("Analysis_Use_Flag",    sngl(one)               )
     else
-       call nc_diag_metadata("Analysis_Use_Flag",    sngl(-one)             )
+       call nc_diag_metadata("Analysis_Use_Flag",    sngl(-one)              )
     endif
 
-    call nc_diag_metadata_to_single("Nonlinear_QC_Rel_Wgt",rwgt)
-    call nc_diag_metadata_to_single("Errinv_Input",errinv_input     )
-    call nc_diag_metadata_to_single("Errinv_Adjust",errinv_adjst     )
-    call nc_diag_metadata_to_single("Errinv_Final",errinv_final     )
+    call nc_diag_metadata_to_single("Nonlinear_QC_Rel_Wgt",rwgt              )
+    call nc_diag_metadata_to_single("Error_Input",         obserr0           ) !emily
+    call nc_diag_metadata_to_single("Errinv_Input",        errinv_input      )
+    call nc_diag_metadata_to_single("Errinv_Adjust",       errinv_adjst      )
+    call nc_diag_metadata_to_single("Errinv_Final",        errinv_final      )
+
     if (hofx_2m_sfcfile ) then
-      call nc_diag_metadata_to_single("Observation", tob            )
+      call nc_diag_metadata_to_single("Observation", tob              )
     else
       call nc_diag_metadata_to_single("Observation", data(itob,i)     )
     endif
-    call nc_diag_metadata_to_single("Obs_Minus_Forecast_adjusted",ddiff      )
+    call nc_diag_metadata_to_single("Obs_Minus_Forecast_adjusted",ddiff         )
     call nc_diag_metadata_to_single("Obs_Minus_Forecast_unadjusted",tob,tges,'-')
 
     if (aircraft_t_bc_pof .or. aircraft_t_bc .or. aircraft_t_bc_ext) then
@@ -1911,12 +1918,15 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     water_frac = 0.0
     land_frac  = 0.0
     ice_frac   = 0.0
+    snow_frac  = 0.0
     if (isli == 0) water_frac = 1.0
     if (isli == 1) land_frac  = 1.0
     if (isli == 2) ice_frac   = 1.0
+    if (isli == 3) snow_frac  = 1.0
     call nc_diag_metadata("Water_Fraction", sngl(water_frac))
     call nc_diag_metadata("Land_Fraction",  sngl(land_frac))
     call nc_diag_metadata("Ice_Fraction",   sngl(ice_frac))
+    call nc_diag_metadata("Snow_Fraction",  sngl(snow_frac))
 !<<emily
     ! END GEOVALS
 

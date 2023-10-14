@@ -587,6 +587,15 @@ subroutine gesinfo
   time_offset=time_offset+fha(3)/r60
 #endif
 
+  write(6,*)'emily time: nhr_assimilation = ', nhr_assimilation 
+  write(6,*)'emily time: idate nmin_an    = ', idate , nmin_an
+  write(6,*)'emily time: ibdate           = ', ibdate
+  write(6,*)'emily time: iadatebgn        = ', iadateend 
+  write(6,*)'emily time: iedate           = ', iedate
+  write(6,*)'emily time: iadateend        = ', iedate
+  write(6,*)'emily time: ianldate         = ', ianldate 
+  write(6,*)'emily time: iwinbgn          = ', iwinbgn 
+
 ! Get information about date/time and number of guess files
   if (regional) then
      if(wrf_nmm_regional) then
