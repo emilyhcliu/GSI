@@ -1666,8 +1666,8 @@ subroutine read_satwnd(nread,ndata,nodata,infile,obstype,lunout,gstime,twind,sis
            cdata_all(23,iout)=r_sprvstg(1,1)      ! subprovider name
            cdata_all(25,iout)=var_jb              ! non linear qc parameter
            cdata_all(26,iout)=one                 ! hilbert curve weight
-           cdata_all(27,iout)=obsdat(5)           ! AMVQ for GOES-17 mitig.AMVs 
            ! extra variables for satwind qc for brett
+           cdata_all(27,iout)=obsdat(5)           ! AMVQ for GOES-17 mitig.AMVs 
            cdata_all(28,iout)=hdrdat(9)           ! wind computation method
            cdata_all(29,iout)=hdrdat(10)          ! satellite zenith angle
            cdata_all(30,iout)=hdrdat(1)           ! satellite identifier
@@ -1679,14 +1679,12 @@ subroutine read_satwnd(nread,ndata,nodata,infile,obstype,lunout,gstime,twind,sis
            if(perturb_obs)then
               cdata_all(35,iout)=ran01dom()*perturb_fact ! u perturbation
               cdata_all(36,iout)=ran01dom()*perturb_fact ! v perturbation
-
 !>>orig
 !           if(perturb_obs)then
 !              cdata_all(27,iout)=ran01dom()*perturb_fact ! u perturbation
 !              cdata_all(28,iout)=ran01dom()*perturb_fact ! v perturbation
 !<<orig
            endif
-
 
         enddo  loop_readsb
  !   End of bufr read loop

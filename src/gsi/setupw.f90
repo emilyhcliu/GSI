@@ -264,7 +264,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   real(r_kind) valqc,valu,valv,dx10,rlow,rhgh,drpx,prsfc,var_jb,rat_err2v
   real(r_kind) cg_t,cvar,wgt,term,qcgross,valqcu,valqcv
   real(r_kind) presw,factw,dpres,ugesin,vgesin,rwgt,dpressave
-  real(r_kind) sfcchk,prsln2,error,dtime,dlon,dlat,r0_001,rsig,thirty,rsigp,obserr0 !emily
+  real(r_kind) sfcchk,prsln2,error,dtime,dlon,dlat,r0_001,rsig,thirty,rsigp,obserr0 !emily: original obs err
   real(r_kind) ratio_errors,goverrd,spdges,spdob,ten,psges,zsges
   real(r_kind) slat,sin2,termg,termr,termrg,pobl,uob,vob
   real(r_kind) uob_reg,vob_reg,uob_e,vob_e,dlon_e,uges_e,vges_e,dudiff_e,dvdiff_e
@@ -274,22 +274,27 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   real(r_kind) dudiff_opp, dvdiff_opp, vecdiff, vecdiff_opp
   real(r_kind) dudiff_opp_rs, dvdiff_opp_rs, vecdiff_rs, vecdiff_opp_rs
   real(r_kind) oscat_vec,ascat_vec,rapidscat_vec
-  real(r_kind) sfctges  !emily_gmao 
+  real(r_kind) sfctges  !emily: model virtual temperature at surface (lower model level) 
   real(r_kind),dimension(nele,nobs):: data
   real(r_kind),dimension(nobs):: dup
   real(r_kind),dimension(nsig)::prsltmp,tges,zges
-  real(r_kind),dimension(nsig)::zges_geometric !emily_gmao: calculated from zges_read
-  real(r_kind),dimension(nsig)::zges_read      !emily_gmao: from geop_heigtl
+  real(r_kind),dimension(nsig)::zges_read      !emily: from geop_heigtl
+  real(r_kind),dimension(nsig)::zges_geometric !emily: calculated from zges_read
   real(r_kind) wdirob,wdirgesin,wdirdiffmax
   real(r_kind),dimension(34)::ptabluv
   real(r_single),allocatable,dimension(:,:)::rdiagbuf
-  real(r_kind),dimension(nsig):: prsltmp2
-  real(r_kind),dimension(nsig+1):: prsitmp
+  !>> JEDI 
+  real(r_kind),dimension(nsig):: prsltmp2 
+  real(r_kind),dimension(nsig+1):: prsitmp  
   real(r_kind),dimension(nsig):: ttmp,qtmp,utmp,vtmp,hsges
-  real(r_kind),dimension(nsig):: ttmp_reverse,tvtmp_reverse,qtmp_reverse,utmp_reverse,vtmp_reverse,hsges_reverse, zges_reverse,prsltmp2_reverse !emily
-  real(r_kind),dimension(nsig):: zges_read_reverse, zges_geometric_reverse !emily_gmao
-  real(r_kind),dimension(nsig+1):: prsitmp_reverse !emily
+  ! GSI profiles are stored with bottom up index; output the profiles
+  ! with top down index  
+  real(r_kind),dimension(nsig):: ttmp_reverse,tvtmp_reverse,qtmp_reverse,utmp_reverse,vtmp_reverse
+  real(r_kind),dimension(nsig):: hsges_reverse, zges_reverse,prsltmp2_reverse
+  real(r_kind),dimension(nsig):: zges_read_reverse, zges_geometric_reverse
+  real(r_kind),dimension(nsig+1):: prsitmp_reverse
   real(r_kind) psges2
+  !<< JEDI 
 
   integer(i_kind) i,nchar,nreal,k,j,l,ii,itype,ijb
 ! Variables needed for new polar winds QC based on Log Normalized Vector Departure (LNVD)
@@ -304,8 +309,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   integer(i_kind) ihgt,ier2,iuse,ilate,ilone
   integer(i_kind) izz,iprvd,isprvd
   integer(i_kind) idomsfc,isfcr,iskint,iff10
-  integer(i_kind) ibb,ikk,ihil,idddd,iamvq
-  integer(i_kind) kk !emily
+  integer(i_kind) kk,ibb,ikk,ihil,idddd,iamvq
   integer(i_kind) water_frac,land_frac,ice_frac, snow_frac !emily
 
   integer(i_kind) num_bad_ikx,iprev_station
@@ -593,6 +597,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
      call tintrp2a1(ges_lnprsl,prsltmp,dlat,dlon,dtime,hrdifsig,&
           nsig,mype,nfldsig)
 
+!>>JEDI
 ! GEOVALS for UFO eval
      psges2  = psges          ! keep in cb
      prsltmp2 = exp(prsltmp)
@@ -608,11 +613,14 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
           nsig,mype,nfldsig)
      call tintrp2a1(geop_hgtl,hsges,dlat,dlon,dtime,hrdifsig,&       !orig
           nsig,mype,nfldsig)
-!>>emily_gmao
-     call tintrp2a1(geop_hgtl,zges_read,dlat,dlon,dtime,hrdifsig,& !emily_gmao
+     ! geopotential height at obs location (lat/lon) and time
+     call tintrp2a1(geop_hgtl,zges_read,dlat,dlon,dtime,hrdifsig, &
           nsig,mype,nfldsig)
+     ! model virtual temperature (ges_tv) at obs location (lat/lon)
+     ! obs time, and model surface (lower model level)
      call tintrp31(ges_tv,sfctges,dlat,dlon,log(psges),dtime, &
           hrdifsig,mype,nfldsig)
+
 !    Convert geopotential height at layer midpoints to geometric 
 !    height using equations (17, 20, 23) in MJ Mahoney's note 
 !    "A discussion of various measures of altitude" (2001).  
@@ -634,9 +642,8 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
      do k=1,nsig
         zges_geometric(k) = (termr*zges_read(k)) / (termrg-zges_read(k))  ! eq (23)
      end do
-!<<emily_gmao
-  
 ! END GEOVALS
+!<<JEDI
 !    Type 221=pibal winds contain a mixture of wind observations reported
 !    by pressure and others by height.  Those levels only reported by 
 !    pressure have a missing value (ie, large) value for the reported 
@@ -660,10 +667,6 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 
      sfc_data = (itype >=280 .and. itype < 300)
      if (z_height .or. sfc_data) then
-!        write(6,*)'emily setupw: you are here 1 ...'
-!        write(6,*)'emily setupw: itype    = ', itype 
-!        write(6,*)'emily setupw: sfc_data = ', sfc_data
-!        write(6,*)'emily setupw: sfcmod_gfs, sfcmod_mm5 = ', sfcmod_gfs, sfcmod_mm5 
 
         drpx = zero
         dpres = data(ihgt,i)
@@ -682,7 +685,6 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
         end if
         dpres=dpres-(dstn+fact*(zsges-dstn))
         if(itype==261) dpres = data(ihgt,i)
-!        write(6,*)'emily setupw: dpres = ', dpres 
 
 !>>orig
 !!       Get guess surface elevation and geopotential height profile 
@@ -690,7 +692,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 !        call tintrp2a1(geop_hgtl,zges,dlat,dlon,dtime,hrdifsig,&
 !             nsig,mype,nfldsig)
 !<<orig
-         zges = zges_read !emily_gmao
+         zges = zges_read ! emily: get geopotential height at obs location/time
 
 !       For observation reported with geometric height above sea level,
 !       convert geopotential to geometric height.
@@ -720,7 +722,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 !              zges_geometric(k) = (termr*zges_read(k)) / (termrg-zges_read(k))  ! eq (23) !emily_gmao
 !           end do
 !<<orig
-            zges = zges_geometric !emily_gmao
+            zges = zges_geometric ! emily: get geometric height at obs location/time
         else if (twodvar_regional) then
            zges(1) = ten
         endif
@@ -778,10 +780,8 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 
         if (zob <= zero .and. twodvar_regional) zob=ten !trap for stations with negative zob
 
-!        if (itype == 290) write(6,*)'emily setupw zob zges(1) = ', zob, zges(1)
         if (zob > zges(1)) then
            factw=one
-!           if (itype == 290) write(6,*)'emily setupw factw (final-1a) = ', factw
         else
            factw = data(iff10,i)
            if(sfcmod_gfs .or. sfcmod_mm5) then
@@ -789,7 +789,6 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
               skint = data(iskint,i)
               call comp_fact10(dlat,dlon,dtime,skint,sfcr,isli,mype,factw)
            end if
-!           if (itype == 290) write(6,*)'emily setupw factw (final-1b) = ', factw
 
            if (zob <= ten) then
               if(zob < ten)then
@@ -810,13 +809,11 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
            else
               term = (zges(1)-zob)/(zges(1)-ten)
               factw = one-term+factw*term
-!              if (itype == 290) write(6,*)'emily setupw factw (final-1c) = ', factw
            end if
 
            ugesin=factw*ugesin
            vgesin=factw*vgesin
 
-!           if (itype == 290) write(6,*)'emily setupw factw (final  ) = ', factw
 
            if (save_jacobian) then
               dhx_dx_u%val = factw * dhx_dx_u%val
@@ -862,8 +859,6 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 
 !    Process observations with reported pressure
      else
-
-!        write(6,*)'emily setupw you are here 2 ...'
 
         dpres = data(ipres,i)
         presw = ten*exp(dpres)
@@ -1644,6 +1639,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
          write(6,*) trim(myname),': ', trim(varname), ' not found in met bundle, ier= ',istatus
          call stop2(999)
      endif
+!>>JEDI
 !    get q ...
      varname='q'
      call gsi_bundlegetpointer(gsi_metguess_bundle(1),trim(varname),rank3,istatus)
@@ -1662,6 +1658,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
          write(6,*) trim(myname),': ', trim(varname), ' not found in met bundle, ier= ',istatus
          call stop2(999)
      endif
+!<<JEDI
 !    get u ...
      varname='u'
      call gsi_bundlegetpointer(gsi_metguess_bundle(1),trim(varname),rank3,istatus)
@@ -1886,9 +1883,9 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
            call nc_diag_metadata_to_single("Station_Elevation",   data(ielev,i)          )
            call nc_diag_metadata_to_single("Pressure",            presw                  )
            call nc_diag_metadata_to_single("Height",              data(ihgt,i)           )
-           call nc_diag_metadata_to_single("ObserrFactorDup",     sqrt(dup(i))           )  !emily
+           call nc_diag_metadata_to_single("ObserrFactorDup",     sqrt(dup(i))           ) !emily
            call nc_diag_metadata_to_single("Time",                dtime,time_offset,'-'  )
-           call nc_diag_metadata_to_single("deltObsTime",         data(itime,i)          )  !emily_test
+           call nc_diag_metadata_to_single("deltObsTime",         data(itime,i)          ) !emily
            call nc_diag_metadata_to_single("Prep_QC_Mark",        data(iqc,i)            )
 !          call nc_diag_metadata("Setup_QC_Mark",                 rmiss_single           )
            call nc_diag_metadata_to_single("Setup_QC_Mark",       bmiss                  )
@@ -1971,16 +1968,15 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
               call nc_diag_data2d("v_Observation_Operator_Jacobian_endind", dhx_dx_v%end_ind)
               call nc_diag_data2d("v_Observation_Operator_Jacobian_val", real(dhx_dx_v%val,r_single))
            endif
-
+!>>JEDI
     ! GEOVALS
-
     !>>emily
     do k = 1, nsig
        kk  = nsig-k+1
        utmp_reverse(kk)     = utmp(k)
        vtmp_reverse(kk)     = vtmp(k)
        ttmp_reverse(kk)     = ttmp(k)
-       tvtmp_reverse(kk)    = tges(k)   !emily_gmao
+       tvtmp_reverse(kk)    = tges(k)   !emily
        qtmp_reverse(kk)     = qtmp(k)
        hsges_reverse(kk)    = hsges(k)
        zges_read_reverse(kk)= zges_read(k)
@@ -1995,13 +1991,13 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     call nc_diag_data2d("atmosphere_pressure_coordinate", sngl(prsltmp2_reverse*r1000))
     call nc_diag_data2d("atmosphere_pressure_coordinate_interface", sngl(prsitmp_reverse*r1000))
     call nc_diag_data2d("air_temperature", sngl(ttmp_reverse))
-    call nc_diag_data2d("virtual_temperature", sngl(tvtmp_reverse)) !emily_gmao
+    call nc_diag_data2d("virtual_temperature", sngl(tvtmp_reverse)) !emily
     call nc_diag_data2d("specific_humidity", sngl(qtmp_reverse))
     call nc_diag_data2d("eastward_wind", sngl(utmp_reverse))
     call nc_diag_data2d("northward_wind", sngl(vtmp_reverse))
 !   call nc_diag_data2d("geopotential_height", sngl(hsges_reverse) )       !orig
-    call nc_diag_data2d("geopotential_height", sngl(zges_read_reverse) )   !emily_gmao
-    call nc_diag_data2d("geometric_height", sngl(zges_geometric_reverse) ) !emily_gmao
+    call nc_diag_data2d("geopotential_height", sngl(zges_read_reverse) )   !emily
+    call nc_diag_data2d("geometric_height", sngl(zges_geometric_reverse) ) !emily
     !<<emily
 
 !!>>orig
@@ -2018,27 +2014,26 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     call nc_diag_metadata("surface_geopotential_height", sngl(zsges) )      !emily
     call nc_diag_metadata("surface_altitude", sngl(zsges) )                 !emily
 !   call nc_diag_metadata("surface_temperature", sngl(data(iskint,i)) )     !emily_orig
-    call nc_diag_metadata("surface_temperature", sngl(sfctges ))            !emily_gmao
-    call nc_diag_metadata("surface_skin_temperature", sngl(data(iskint,i)) )!emily_gmao
+    call nc_diag_metadata("surface_temperature", sngl(sfctges ))            !emily: check me 
+    call nc_diag_metadata("surface_skin_temperature", sngl(data(iskint,i)) )!emily: check me  
     call nc_diag_metadata("tropopause_pressure", sngl(trop5*r100) )
     call nc_diag_metadata("surface_air_pressure", sngl(psges2*r1000) )
     call nc_diag_metadata("Land_Type_Index", sngl(isli))
 
-!>>emily
-   water_frac = 0.0
-   land_frac  = 0.0
-   ice_frac   = 0.0
-   snow_frac  = 0.0
-   if (isli == 0) water_frac = 1.0
-   if (isli == 1) land_frac  = 1.0
-   if (isli == 2) ice_frac   = 1.0
-   if (isli == 3) snow_frac  = 1.0
-   call nc_diag_metadata("Water_Fraction", sngl(water_frac))
-   call nc_diag_metadata("Land_Fraction",  sngl(land_frac))
-   call nc_diag_metadata("Ice_Fraction",   sngl(ice_frac))
-   call nc_diag_metadata("Snow_Fraction",  sngl(snow_frac))
-!<<emily
-
+    !>>emily
+    water_frac = 0.0
+    land_frac  = 0.0
+    ice_frac   = 0.0
+    snow_frac  = 0.0
+    if (isli == 0) water_frac = 1.0
+    if (isli == 1) land_frac  = 1.0
+    if (isli == 2) ice_frac   = 1.0
+    if (isli == 3) snow_frac  = 1.0
+    call nc_diag_metadata("Water_Fraction", sngl(water_frac))
+    call nc_diag_metadata("Land_Fraction",  sngl(land_frac))
+    call nc_diag_metadata("Ice_Fraction",   sngl(ice_frac))
+    call nc_diag_metadata("Snow_Fraction",  sngl(snow_frac))
+    !<<emily
     ! END GEOVALS
     ! extra fields for AMV QC
     call nc_diag_metadata("wind_computation_method", sngl(data(28,i)))
@@ -2051,6 +2046,7 @@ subroutine setupw(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     ! end extra AMV QC fields
     if (ictype(ikx) == 290) &
     call nc_diag_metadata("satellite_identifier", sngl(icsubtype(ikx)))
+!<<JEDI
 
   end subroutine contents_netcdf_diag_
 
