@@ -1052,7 +1052,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 
 !------------------------------------------------------------------------
 
-           write(6,*)'emily checking offtime_data = ', offtime_data
+!          write(6,*)'emily checking offtime_data = ', offtime_data
            if(offtime_data) then
  
 !             in time correction for observations to account for analysis
@@ -1636,11 +1636,11 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 
 !          If temperature ob, extract information regarding virtual
 !          versus sensible temperature
-!          if(tob) then   !orig
+!          if(tob) then             !orig
            if(tob .or. psob ) then  !emily
               ! use tvirtual if tsensible flag not set, and not in either 2Dregional or global_2m DA mode
               if ( (.not. tsensible)  .and. .not. (twodvar_regional .or. global_2m_land) ) then
-              !  write(6,*)'emily checking vtcd = ', vtcd
+                 !write(6,*)'emily checking vtcd = ', vtcd
                  do k=1,levs
                     tvflg(k)=one                               ! initialize as sensible
                     do j=1,20
