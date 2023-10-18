@@ -111,7 +111,6 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   use m_obsdiagNode, only: obsdiagNode_set
   use m_obsdiagNode, only: obsdiagNode_get
   use m_obsdiagNode, only: obsdiagNode_assert
-
   use obsmod, only: rmiss_single,perturb_obs,oberror_tune,&
                     lobsdiagsave,nobskeep,lobsdiag_allocated,&
                     time_offset,lobsdiag_forenkf,ianldate
@@ -130,10 +129,11 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   use gridmod, only: nsig,get_ij,twodvar_regional
   use constants, only: zero,one_tenth,one,half,pi,g_over_rd, &
              huge_r_kind,tiny_r_kind,two,huge_single, &
-             r1000,wgtlim,tiny_single,r10,three
+             r1000,r100,wgtlim,tiny_single,r10,three
   use jfunc, only: jiter,last,jiterstart,miter
   use qcmod, only: dfact,dfact1,npres_print,vqc,nvqc
   use guess_grids, only: hrdifsig,ges_lnprsl,nfldsig,ntguessig
+  use guess_grids, only: geop_hgtl, ges_prsi, ges_tsen
   use convinfo, only: nconvtype,cermin,cermax,cgross,cvar_b,cvar_pg,ictype,icsubtype
   use convinfo, only: ibeta,ikapa 
 
@@ -144,6 +144,7 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   use gsi_metguess_mod, only : gsi_metguess_get,gsi_metguess_bundle
   use sparsearr, only: sparr2, new, size, writearray, fullarray
   use rapidrefresh_cldsurf_mod, only: l_closeobs
+  use obsmod, only: bmiss  !emily
 
   implicit none
 
@@ -170,8 +171,8 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 
 ! Declare local variables
   real(r_double) rstation_id
-  real(r_kind) tges,tges2,drbx,pob,pges,psges,psges2,dlat,dlon,dtime,var_jb
-  real(r_kind) rdelz,rdp,halfpi,obserror,obserrlm,drdp,residual,ratio
+  real(r_kind) tges,tges2,drbx,pob,pges,psges,psges2,dlat,dlon,dtime,var_jb,tges0,tvges  !emily
+  real(r_kind) rdelz,rdp,halfpi,obserror,obserrlm,drdp,residual,ratio,obserr0,obserr_step1,grosschkbound !emily
   real(r_kind) errinv_input,errinv_adjst,errinv_final
   real(r_kind) err_input,err_adjst,err_final,tfact
   real(r_kind) zsges,pgesorig,rwgt
@@ -180,16 +181,23 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   real(r_kind) val2,ress,ressw2,val,valqc
   real(r_kind) cg_t,cvar,wgt,rat_err2,qcgross
   real(r_kind),dimension(nobs):: dup
+  real(r_kind) obserr_factor_prschk   !emily
+  real(r_single),dimension(nobs):: slat, slon  !emily 
   real(r_kind),dimension(nsig):: prsltmp
+  real(r_kind),dimension(nsig):: zges, prsltmp2, tvgestmp, tsentmp, qtmp, utmp, vtmp
+  real(r_kind) :: tgges,roges
+  real(r_kind),dimension(nsig+1):: prsitmp
   real(r_kind),dimension(nele,nobs):: data
   real(r_single),allocatable,dimension(:,:)::rdiagbuf
 
-  integer(i_kind) ier,ilon,ilat,ipres,ihgt,itemp,id,itime,ikx,iqc,iptrb,ijb
+  integer(i_kind) gross_check_flag !emily
+  integer(i_kind) ier,ilon,ilat,ipres,ihgt,itemp,id,itime,ikx,iqc,iptrb,ijb,iqt !emily
   integer(i_kind) ier2,iuse,ilate,ilone,istnelv,idomsfc,izz,iprvd,isprvd
   integer(i_kind) ikxx,nn,ibin,ioff,ioff0
   integer(i_kind) i,j,nchar,nreal,ii,jj,k,l,mm1
   integer(i_kind) itype,isubtype 
   integer(i_kind) ibb,ikk,idddd
+  integer(i_kind) msges
 
   logical,dimension(nobs):: luse,muse
   integer(i_kind),dimension(nobs):: ioid ! initial (pre-distribution) obs ID
@@ -203,6 +211,7 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   real(r_kind) :: hr_offset
 
   logical:: in_curbin, in_anybin, save_jacobian
+  logical iqtflg   !emily
   type(psNode),pointer:: my_head
   type(obs_diag ),pointer:: my_diag
   type(obs_diags),pointer:: my_diagLL
@@ -214,6 +223,8 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   real(r_kind),allocatable,dimension(:,:,:  ) :: ges_ps
   real(r_kind),allocatable,dimension(:,:,:  ) :: ges_z
   real(r_kind),allocatable,dimension(:,:,:,:) :: ges_tv
+  real(r_kind),allocatable,dimension(:,:,:,:) :: ges_q
+  real(r_kind),allocatable,dimension(:,:,:,:) :: ges_u, ges_v
 
   type(sparr2) :: dhx_dx
   integer(i_kind) :: ps_ind, nnz, nind
@@ -249,7 +260,9 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
   iprvd=18    ! index of observation provider
   isprvd=19   ! index of observation subprovider
   ijb=20      ! index of non linear qc parameter
-  iptrb=21    ! index of ps perturbation
+  iqt=21      ! index of virtual or sensible temperature !emily 
+! iptrb=21    ! index of ps perturbation  !orig
+  iptrb=22    ! index of ps perturbation  !emily
 
 ! Declare local constants
   halfpi = half*pi
@@ -272,9 +285,13 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 !  Check to see if observation should be used or monitored
 !  muse = true  then used
 
+
   do i=1,nobs
      muse(i)=nint(data(iuse,i)) <= jiter
+     slat(i) = data(ilate,i)  !emily
+     slon(i) = data(ilone,i)  !emily
   end do
+55 format(a20,2x,i6,2x,i6,2x,l6)
 !  If HD raobs available move prepbufr version to monitor
   if(nhdps > 0)then
      do i=1,nobs
@@ -299,9 +316,31 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 !  Check for duplicate observations at same location
   dup=one
   do k=1,nobs
+     rstation_id = data(id,k)
+     ikx         = nint(data(ikxx,k))
+     itype       = ictype(ikx)
+     write(10000+mype, *) ' '  
+     write(10000+mype, *) 'new obs ...  '  
+     write(10000+mype, *) 'k lat/lon D  ', k, data(ilate,k), data(ilone,k)
+     write(10000+mype, *) 'k lat/lon S  ', k, slat(k), slon(k)         
+     write(10000+mype, *) 'k station_id ', k, station_id
+     write(10000+mype, *) 'k itype      ', k, itype
+     write(10000+mype, *) 'k time       ', k, data(itime,k)
+     write(10000+mype, *) 'k obserr     ', k, data(ier,k)
+     write(10000+mype, *) 'k muse       ', k, muse(k), data(iuse,k) 
+     write(10000+mype, *) 'k luse       ', k, luse(k)
      do l=k+1,nobs
-        if(data(ilat,k) == data(ilat,l) .and. &
-           data(ilon,k) == data(ilon,l) .and. &
+        rstation_id = data(id,l)
+        ikx         = nint(data(ikxx,l))
+        itype       = ictype(ikx)
+!>>orig
+!        if(data(ilat,k) == data(ilat,l) .and. &
+!           data(ilon,k) == data(ilon,l) .and. &
+!           data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
+!           muse(k) .and. muse(l))then
+!<<orig
+        if(slat(k) == slat(l) .and. &
+           slon(k) == slon(l) .and. &
            data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
            muse(k) .and. muse(l))then
            if(l_closeobs) then
@@ -315,6 +354,17 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
               dup(k)=dup(k)+one-tfact*tfact*(one-dfact)
               dup(l)=dup(l)+one-tfact*tfact*(one-dfact)
            endif
+!          write(10000+mype, *) 'l lat/lon    ',  l, data(ilate,l), data(ilone,l)  !orig
+           write(10000+mype, *) 'l lat/lon    ',  l, slat(l), slon(l)  !emily
+           write(10000+mype, *) 'l station_id ',  l, station_id
+           write(10000+mype, *) 'l itype      ',  l, itype
+           write(10000+mype, *) 'l time       ',  l, data(itime,l)
+           write(10000+mype, *) 'l obserr     ',  l, data(ier,l)
+           write(10000+mype, *) 'l muse       ',  l, muse(l), nint(data(iuse,l)) 
+           write(10000+mype, *) 'l dtime      ',  l, data(itime,k)-data(itime,l)
+           write(10000+mype, *) 'l tfact      ',  l, tfact 
+           write(10000+mype, *) 'l dup        ',  l, dup(l), sqrt(dup(l)) 
+           write(10000+mype, *) 'k dup        ',  k, dup(k), sqrt(dup(k))
         end if
      end do
   end do
@@ -344,11 +394,16 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 
   call dtime_setup()
   do i = 1,nobs
+
+     obserr_factor_prschk = 99.99_r_kind  !emily_test
+
      dtime=data(itime,i)
      call dtime_check(dtime, in_curbin, in_anybin)
      if(.not.in_anybin) cycle
 
      if(in_curbin) then
+        iqtflg=nint(data(iqt,i)) == 0  !emily: this is virtual temperature
+        obserr0=data(ier2,i)*r1000 !emily: cb --> hPa --> Pa 
         ikx=nint(data(ikxx,i))
         itype=ictype(ikx) 
         isubtype=icsubtype(ikx)
@@ -380,7 +435,8 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 !    Link obs to diagnostics structure
      if (luse_obsdiag) then
         my_diag => obsdiagLList_nextNode(my_diagLL      ,&
-                create = .not.lobsdiag_allocated        ,&
+            
+   create = .not.lobsdiag_allocated        ,&
                    idv = is             ,&
                    iob = ioid(i)        ,&
                    ich = 1              ,&
@@ -399,6 +455,11 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
      obserror = max(cermin(ikx)*one_tenth,&
           min(cermax(ikx)*one_tenth,data(ier,i)))
 
+!>>emily
+     obserr_step1 = data(ier,i)*r1000
+!<<emily
+
+
 ! Get guess sfc hght at obs location
 
      call intrp2a11(ges_z(1,1,ntguessig),zsges,dlat,dlon,mype)
@@ -410,6 +471,28 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
         mype,nfldsig)
      call tintrp2a1(ges_lnprsl,prsltmp,dlat,dlon,dtime,hrdifsig,&
         nsig,mype,nfldsig)
+
+!   interpolate geopotential height to location
+    call tintrp2a1(geop_hgtl, zges, dlat, dlon, dtime, hrdifsig, nsig, mype, nfldsig)
+    prsltmp2 = exp(prsltmp) ! pressure on model layers
+    ! pressure on interfaces
+    call tintrp2a1(ges_prsi,prsitmp,dlat,dlon,dtime,hrdifsig,nsig+1,mype,nfldsig)
+    ! virtual temperature profile
+    call tintrp2a1(ges_tv,tvgestmp,dlat,dlon,dtime,hrdifsig,nsig,mype,nfldsig)
+    ! sensible temperature profile
+    call tintrp2a1(ges_tsen,tsentmp,dlat,dlon,dtime,hrdifsig,nsig,mype,nfldsig)
+    ! specific humidity
+    call tintrp2a1(ges_q,qtmp,dlat,dlon,dtime,hrdifsig,nsig,mype,nfldsig)
+    ! winds
+    call tintrp2a1(ges_u,utmp,dlat,dlon,dtime,hrdifsig,nsig,mype,nfldsig)
+    call tintrp2a1(ges_v,vtmp,dlat,dlon,dtime,hrdifsig,nsig,mype,nfldsig)
+    ! landmask
+    msges = 0
+    if(itype == 180 .or. itype == 182 .or. itype == 183 .or. itype == 199) then    !sea
+      msges=0
+    elseif(itype == 181 .or. itype == 187 .or. itype == 188) then  !land
+      msges=1
+    endif
 
 ! Convert pressure to grid coordinates
 
@@ -424,6 +507,8 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
      call tintrp31(ges_tv,tges,dlat,dlon,psges,dtime, &
           hrdifsig,mype,nfldsig)
 
+     tvges = tges  !emily
+
 ! Adjust observation error and obs value due to differences in surface height
 
      rdelz=dhgt-zsges
@@ -433,6 +518,7 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 
         drbx = half*abs(tges-dtemp)+r0_2+r0_005*abs(rdelz)
         tges = half*(tges+dtemp)
+        tges0 = tges    !emily_test
      else
 
 !  No observed temperature 
@@ -482,10 +568,62 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 
 !  find adjustment to observational error (in terms of ratio)
      ratio_errors=error/(data(ier,i)+drdp)
+!    obserr_factor_prschk = (data(ier,i)+drdp)/error        !emily
+     obserr_factor_prschk = (data(ier,i)+drdp)/data(ier,i)  !emily_test
      error=one/error
+
+!>>emily
+     if (pob > 1.0e8 .or. dhgt > 1.0e8) & 
+        write(6,*) 'emily checking pob dhgt      ', pob, dhgt
+        write(6,*) 'emily checking missing value ', bmiss, bmiss*one_tenth 
+     if (pob >= bmiss*one_tenth .or. dhgt >= bmiss) then
+        obserr_factor_prschk = 1.0_r_kind  !emily_test
+     endif
+!<<emily
 
 ! Compute innovations
      ddiff=pob-pges  ! in cb
+
+
+!>>emily
+   rstation_id = data(id,i)
+   ikx         = nint(data(ikxx,i))
+   itype       = ictype(ikx)
+   write(30000+mype,*) 'emily ................................................... ' 
+   write(30000+mype,*) 'emily lat/lon D            ', data(ilate,i), data(ilone,i) 
+   write(30000+mype,*) 'emily lat/lon S            ', slat(i), slon(i) 
+   write(30000+mype,*) 'emily luse                 ', luse(i) 
+   write(30000+mype,*) 'emily station_id           ', station_id 
+   write(30000+mype,*) 'emily obs typ              ', itype
+   write(30000+mype,*) 'emily obs dtime            ', data(itime,i) 
+   write(30000+mype,*) 'emily obs ps               ', data(ipres,i)*1000.
+   write(30000+mype,*) 'emily model elevation      ', zsges 
+   write(30000+mype,*) 'emily obs hgt              ', dhgt
+   write(30000+mype,*) 'emily obs selev            ', data(istnelv,i) 
+   write(30000+mype,*) 'emily obs tv               ', data(itemp,i) 
+   write(30000+mype,*) 'emily ges tv               ', tvges 
+   write(30000+mype,*) 'emily zsges                ', zsges 
+   write(30000+mype,*) 'emily avg_tv0              ', tges0 
+   write(30000+mype,*) 'emily avg_tv               ', tges 
+   write(30000+mype,*) 'emily model_temp_sfc       ', tvges 
+   write(30000+mype,*) 'emily ps                   ', pgesorig*1000. 
+   write(30000+mype,*) 'emily ps_cor               ', pges*1000. 
+   write(30000+mype,*) 'emily .......              ' 
+   write(30000+mype,*) 'emily obs ps               ', data(ipres,i)*1000.
+   write(30000+mype,*) 'emily tvflg                ', data(iqt,i), iqtflg 
+   write(30000+mype,*) 'emily model elevation      ', zsges 
+   write(30000+mype,*) 'emily ob elevation (ob hgt)', dhgt 
+   write(30000+mype,*) 'emily obs_temp_sfc(obs tv) ', data(itemp,i) 
+   write(30000+mype,*) 'emily model_temp_sfc       ', tvges 
+   write(30000+mype,*) 'emily tges2                ', tges2 
+   write(30000+mype,*) 'emily tges                 ', tges 
+   write(30000+mype,*) 'emily orig oberr           ', data(ier2,i)*r100 
+   write(30000+mype,*) 'emily current oberr        ', data(ier,i)*r100 
+   write(30000+mype,*) 'emily rdelz                ', rdelz 
+   write(30000+mype,*) 'emily drbx                 ', drbx
+   write(30000+mype,*) 'emily drdp                 ', drdp*r1000 
+   write(30000+mype,*) 'emily obserr_factor_prschk ', obserr_factor_prschk 
+!<<emily
 
 ! Oberror Tuning and Perturb Obs
      if(muse(i)) then
@@ -500,9 +638,9 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 
 !    Gross check using innovation normalized by error
 
-     obserror = min(r10/max(ratio_errors*error,tiny_r_kind),huge_r_kind)
-     obserrlm = max(cermin(ikx),min(cermax(ikx),obserror))
-     residual = abs(r10*ddiff)
+     obserror = min(r10/max(ratio_errors*error,tiny_r_kind),huge_r_kind) !emily: mb
+     obserrlm = max(cermin(ikx),min(cermax(ikx),obserror))               !emily: mb
+     residual = abs(r10*ddiff)                                           !emily: mb
      ratio    = residual/obserrlm
 
 ! modify gross check limit for quality mark=3
@@ -512,10 +650,13 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
         qcgross=cgross(ikx)
      endif
 
+     gross_check_flag = 0     !emily
+     grosschkbound = qcgross * obserrlm * r100  !emily: hPa to Pa
      if (ratio > qcgross .or. ratio_errors < tiny_r_kind) then
         if (luse(i)) awork(6) = awork(6)+one
         error = zero
         ratio_errors = zero
+        gross_check_flag = 1  !emily
      else
         ratio_errors = ratio_errors/sqrt(dup(i))
      end if
@@ -650,6 +791,7 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
         else
            err_final = huge_single
         endif
+        if (.not. muse(i)) err_final = huge_single  !emily
 
         errinv_input = huge_single
         errinv_adjst = huge_single
@@ -760,6 +902,61 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
          do ifld=2,nfldsig
             call gsi_bundlegetpointer(gsi_metguess_bundle(ifld),trim(varname),rank3,istatus)
             ges_tv(:,:,:,ifld)=rank3
+         enddo
+     else
+         write(6,*) trim(myname),': ', trim(varname), ' not found in met bundle, ier= ',istatus
+         call stop2(999)
+     endif
+!    get q ...
+     varname='q'
+     call gsi_bundlegetpointer(gsi_metguess_bundle(1),trim(varname),rank3,istatus)
+     if (istatus==0) then
+         if(allocated(ges_q))then
+            write(6,*) trim(myname), ': ', trim(varname), ' already incorrectly alloc '
+            call stop2(999)
+         endif
+         allocate(ges_q(size(rank3,1),size(rank3,2),size(rank3,3),nfldsig))
+         ges_q(:,:,:,1)=rank3
+         do ifld=2,nfldsig
+            call gsi_bundlegetpointer(gsi_metguess_bundle(ifld),trim(varname),rank3,istatus)
+            ges_q(:,:,:,ifld)=rank3
+         enddo
+     else
+         write(6,*) trim(myname),': ', trim(varname), ' not found in met bundle, ier= ',istatus
+         call stop2(999)
+     endif
+
+!    get u ...
+     varname='u'
+     call gsi_bundlegetpointer(gsi_metguess_bundle(1),trim(varname),rank3,istatus)
+     if (istatus==0) then
+         if(allocated(ges_u))then
+            write(6,*) trim(myname), ': ', trim(varname), ' already incorrectly alloc '
+            call stop2(999)
+         endif
+         allocate(ges_u(size(rank3,1),size(rank3,2),size(rank3,3),nfldsig))
+         ges_u(:,:,:,1)=rank3
+         do ifld=2,nfldsig
+            call gsi_bundlegetpointer(gsi_metguess_bundle(ifld),trim(varname),rank3,istatus)
+            ges_u(:,:,:,ifld)=rank3
+         enddo
+     else
+         write(6,*) trim(myname),': ', trim(varname), ' not found in met bundle, ier= ',istatus
+         call stop2(999)
+     endif
+!    get v ...
+     varname='v'
+     call gsi_bundlegetpointer(gsi_metguess_bundle(1),trim(varname),rank3,istatus)
+     if (istatus==0) then
+         if(allocated(ges_v))then
+            write(6,*) trim(myname), ': ', trim(varname), ' already incorrectly alloc '
+            call stop2(999)
+         endif
+         allocate(ges_v(size(rank3,1),size(rank3,2),size(rank3,3),nfldsig))
+         ges_v(:,:,:,1)=rank3
+         do ifld=2,nfldsig
+            call gsi_bundlegetpointer(gsi_metguess_bundle(ifld),trim(varname),rank3,istatus)
+            ges_v(:,:,:,ifld)=rank3
          enddo
      else
          write(6,*) trim(myname),': ', trim(varname), ' not found in met bundle, ier= ',istatus
@@ -882,6 +1079,7 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
 
   end subroutine contents_binary_diag_
   subroutine contents_netcdf_diag_(odiag)
+  use obsmod, only: bmiss  !emily
   type(obs_diag),pointer,intent(in):: odiag
 ! Observation class
   character(7),parameter     :: obsclass = '     ps'
@@ -891,12 +1089,20 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
            call nc_diag_metadata("Observation_Type",        ictype(ikx)            )
            call nc_diag_metadata("Observation_Subtype",     icsubtype(ikx)         )
            !Replace direct calls to nc_diag_metadata with the screening subroutine
-           call nc_diag_metadata_to_single("Latitude",      data(ilate,i)          )
-           call nc_diag_metadata_to_single("Longitude",     data(ilone,i)          )
+!          call nc_diag_metadata_to_single("Latitude",      data(ilate,i)          ) !orig
+!          call nc_diag_metadata_to_single("Longitude",     data(ilone,i)          ) !orig
+           call nc_diag_metadata("Latitude",                slat(i)                ) !emily
+           call nc_diag_metadata("Longitude",               slon(i)                ) !emily
            call nc_diag_metadata_to_single("Station_Elevation",data(istnelv,i)     )
            call nc_diag_metadata_to_single("Pressure",      data(ipres,i),r10,'*'  )
            call nc_diag_metadata_to_single("Height",        dhgt                   )
+           call nc_diag_metadata_to_single("ObserrFactorDup",         sqrt(dup(i))     )     !emily
+           call nc_diag_metadata_to_single("ObserrFactorPrsChk",      obserr_factor_prschk)  !emily
+           call nc_diag_metadata_to_single("GrossChkBound",           grosschkbound    )     !emily
            call nc_diag_metadata_to_single("Time",          dtime,time_offset,'-'  )
+           call nc_diag_metadata_to_single("deltObsTime",             data(itime,i)    )     !emily_test
+           call nc_diag_metadata("GrossCheckFlag",          sngl(gross_check_flag))!emily_test
+           call nc_diag_metadata_to_single("Setup_QC_Mark",           data(iqt,i)      )     !emily_test
            call nc_diag_metadata_to_single("Prep_QC_Mark",  data(iqc,i)            )
            call nc_diag_metadata_to_single("Prep_Use_Flag", data(iuse,i)           )
            call nc_diag_metadata_to_single("Nonlinear_QC_Var_Jb",var_jb            )
@@ -907,6 +1113,8 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
               call nc_diag_metadata("Analysis_Use_Flag",   -1.0_r_single           )
            endif
 
+           call nc_diag_metadata_to_single("Error_Intermediate1", obserr_step1     ) !emily: Pa
+           call nc_diag_metadata_to_single("Error_Input",         obserr0          ) !emily: Pa
            call nc_diag_metadata_to_single("Errinv_Input",  errinv_input           )
            call nc_diag_metadata_to_single("Errinv_Adjust", errinv_adjst           )
            call nc_diag_metadata_to_single("Errinv_Final",  errinv_final           )
@@ -915,6 +1123,24 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
            call nc_diag_metadata_to_single("Obs_Minus_Forecast_adjusted",pob,pges,'-')
            call nc_diag_metadata_to_single("Obs_Minus_Forecast_unadjusted",pob,pgesorig,'-')
 
+!>>emily
+           if (iqtflg) then ! this is virtual temperature 
+              call nc_diag_metadata("Observation_Virtual_Temperature", sngl(dtemp) )
+              call nc_diag_metadata("Observation_Sensible_Temperature", sngl(bmiss))
+           else ! this is sensible temperature
+              call nc_diag_metadata("Observation_Virtual_Temperature", sngl(bmiss) )
+              call nc_diag_metadata("Observation_Sensible_Temperature", sngl(dtemp))
+           endif
+!<<emily
+!>>orig
+!           call nc_diag_metadata("Obs_Minus_Forecast_adjusted",   sngl(pob-pges)   )
+!           call nc_diag_metadata("Obs_Minus_Forecast_unadjusted", sngl(pob-pgesorig))
+!<<orig
+!>>emily
+           call nc_diag_metadata("Forecast_adjusted",             sngl(pges)   )
+           call nc_diag_metadata("Forecast_unadjusted",           sngl(pgesorig))
+!<<emily
+ 
           if (lobsdiagsave) then
 
               do jj=1,miter
@@ -945,6 +1171,26 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
              call nc_diag_data2d("Observation_Operator_Jacobian_endind", dhx_dx%end_ind)
              call nc_diag_data2d("Observation_Operator_Jacobian_val", real(dhx_dx%val,r_single))
            endif
+           ! geovals for JEDI UFO
+!          call nc_diag_metadata("surface_geometric_height", sngl(zsges))  !orig
+           call nc_diag_metadata("surface_altitude", sngl(zsges))          !emily
+           call nc_diag_metadata("surface_pressure", sngl(pgesorig*r100))
+           !call nc_diag_metadata("surface_roughness", sngl())
+           !call nc_diag_metadata("surface_height", sngl())
+           !call nc_diag_metadata("skin_temperature", sngl(tgges))
+           !call nc_diag_metadata("2m_temperature", sngl(tgges))
+           !call nc_diag_metadata("2m_specific_humidity", sngl())
+           call nc_diag_metadata("landmask", sngl(msges))
+!          call nc_diag_data2d("geopotential_height", sngl(zsges+zges))  !orig
+           call nc_diag_data2d("geopotential_height", sngl(zges))   !emily_test
+           call nc_diag_data2d("model_height", sngl(zges) )         !emily_test 
+           call nc_diag_data2d("atmosphere_pressure_coordinate", sngl(prsltmp2*r1000))
+           call nc_diag_data2d("atmosphere_pressure_coordinate_interface", sngl(prsitmp*r1000))
+           call nc_diag_data2d("virtual_temperature", sngl(tvgestmp))
+           call nc_diag_data2d("air_temperature", sngl(tsentmp))
+           call nc_diag_data2d("specific_humidity", sngl(qtmp))
+           call nc_diag_data2d("northward_wind", sngl(utmp))
+           call nc_diag_data2d("eastward_wind", sngl(vtmp))
 
   end subroutine contents_netcdf_diag_
 
@@ -952,6 +1198,9 @@ subroutine setupps(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsa
     if(allocated(ges_tv)) deallocate(ges_tv)
     if(allocated(ges_z )) deallocate(ges_z )
     if(allocated(ges_ps)) deallocate(ges_ps)
+    if(allocated(ges_q)) deallocate(ges_q)
+    if(allocated(ges_u)) deallocate(ges_u)
+    if(allocated(ges_v)) deallocate(ges_v)
   end subroutine final_vars_
 
 end subroutine setupps

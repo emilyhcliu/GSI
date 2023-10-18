@@ -478,11 +478,13 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   if(tob)then
      nreal=25
   else if(uvob) then 
-     nreal=26
+     nreal=34
+!    nreal=26  !orig
   else if(spdob) then
      nreal=24
   else if(psob) then
-     nreal=20
+!    nreal=20   !orig
+     nreal=21   !emily
   else if(qob) then
      nreal=26
   else if(pwob) then
@@ -635,6 +637,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 
 !    Time offset
      if(nmsg == 0) call time_4dvar(idate,toff)
+!    write(6,*)'emily checking toff = ', toff
      nmsg=nmsg+1
      if (nmsg>nmsgmax) then
         write(6,*)'READ_PREPBUFR: messages exceed maximum ',nmsgmax
@@ -1049,6 +1052,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 
 !------------------------------------------------------------------------
 
+!          write(6,*)'emily checking offtime_data = ', offtime_data
            if(offtime_data) then
  
 !             in time correction for observations to account for analysis
@@ -1079,6 +1083,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
            if (.not. (aircraft_t_bc .and. acft_profl_file)) then
               timeobs=real(real(hdr(4),r_single),r_double)
               t4dv=timeobs + toff
+           
               zeps=1.0e-8_r_kind
               if (t4dv<zero  .and.t4dv>      -zeps) t4dv=zero
               if (t4dv>winlen.and.t4dv<winlen+zeps) t4dv=winlen
@@ -1106,8 +1111,12 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 !          skip this observation.  This check must be done before thinning.
            if (kx==290 .or. kx==289 .or. kx==285) then
               call deter_sfc_type(dlat_earth,dlon_earth,t4dv,isflg,tsavg)
-              if (isflg /= 0) cycle loop_readsb
-              if (tsavg <= 273.0_r_kind) cycle loop_readsb
+!>>emily
+!>>orig
+!              if (isflg /= 0) cycle loop_readsb
+!              if (tsavg <= 273.0_r_kind) cycle loop_readsb
+!<<orig
+!<<emily
            endif
 
            sfctype=(kx>179.and.kx<190).or.(kx>=280.and.kx<=290).or. &
@@ -1627,10 +1636,11 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 
 !          If temperature ob, extract information regarding virtual
 !          versus sensible temperature
-           if(tob) then
+!          if(tob) then             !orig
+           if(tob .or. psob ) then  !emily
               ! use tvirtual if tsensible flag not set, and not in either 2Dregional or global_2m DA mode
               if ( (.not. tsensible)  .and. .not. (twodvar_regional .or. global_2m_land) ) then
-
+                 !write(6,*)'emily checking vtcd = ', vtcd
                  do k=1,levs
                     tvflg(k)=one                               ! initialize as sensible
                     do j=1,20
@@ -1803,6 +1813,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  if ( obsdat(1,k)< r500) qm=100
                  zqm=idnint(qcmark(4,k))
                  if (zqm>=lim_zqm .and. zqm/=15 .and. zqm/=9) qm=9
+          !      if (zqm>=lim_zqm .and. zqm/=15 .and. zqm/=9) pqm(k)=9 !emily_test
               endif
 
 !             if(convobs .and. pqm(k) >=lim_qm .and. qm/=15 .and. qm/=9 )cycle loop_k_levs
@@ -2320,6 +2331,9 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 !             Surface pressure 
               else if(psob) then
 
+                 qtflg=tvflg(k)   !emily
+                 write(6,*)'emily checkint psob t4dv = ', t4dv
+
                  poe=obserr(1,k)*one_tenth                  ! convert from mb to cb
                  if (inflate_error) poe=poe*r1_2
                  cdata_all(1,iout)=poe                     ! surface pressure error (cb)
@@ -2346,7 +2360,9 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  cdata_all(18,iout)=r_prvstg(1,1)          ! provider name
                  cdata_all(19,iout)=r_sprvstg(1,1)         ! subprovider name
                  cdata_all(20,iout)=var_jb(1,k)            ! non linear qc b parameter 
-                 if(perturb_obs)cdata_all(21,iout)=ran01dom()*perturb_fact ! ps perturbation
+                 cdata_all(21,iout)=qtflg                  ! qtflg=0 (virtual) qtflg=1 (sensible) !emily
+!                if(perturb_obs)cdata_all(21,iout)=ran01dom()*perturb_fact ! ps perturbation  !orig
+                 if(perturb_obs)cdata_all(22,iout)=ran01dom()*perturb_fact ! ps perturbation
                  if (twodvar_regional) &
                     call adjust_error(cdata_all(14,iout),cdata_all(15,iout),cdata_all(11,iout),cdata_all(1,iout))
 
