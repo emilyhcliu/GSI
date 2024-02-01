@@ -15,6 +15,16 @@ load(pathJoin("python", python_ver))
 load(pathJoin("cmake", cmake_ver))
 
 load("gsi_common")
+setenv("crtm_ROOT","/scratch1/NCEPDEV/da/Emily.Liu/CRTM-test/CRTM/CRTMv3/build")
+setenv("crtm_VERSION","3.1.0")
+setenv("CRTM_INC","/scratch1/NCEPDEV/da/Emily.Liu/CRTM-test/CRTM/CRTMv3/build/module/crtm/Intel/2021.5.0.20211109")
+setenv("CRTM_LIB","/scratch1/NCEPDEV/da/Emily.Liu/CRTM-test/CRTM/CRTMv3/build/lib/libcrtm.so")
+setenv("CRTM_FIX","/scratch1/NCEPDEV/da/Emily.Liu/CRTM-test/CRTM/CRTMv3-fix/Little_Endian")
+whatis("Name: crtm")
+whatis("Version: 3.1.0")
+whatis("Category: library")
+whatis("Description: crtm library")
+
 load(pathJoin("prod_util", prod_util_ver))
 
 pushenv("CFLAGS", "-xHOST")

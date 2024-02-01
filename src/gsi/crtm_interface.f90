@@ -571,7 +571,8 @@ subroutine init_crtm(init_pass,mype_diaghdr,mype,nchanl,nreal,isis,obstype,radmo
     n_actual_aerosols_wk=0
     n_aerosols_fwd_wk=0
     n_aerosols_jac_wk=0
-    Load_AerosolCoeff=.false.
+!oirg    Load_AerosolCoeff=.false.
+    Load_AerosolCoeff=.true.  
  endif
 
 ! Initialize radiative transfer

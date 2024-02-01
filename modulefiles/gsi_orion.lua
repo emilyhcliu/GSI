@@ -15,6 +15,16 @@ load(pathJoin("python", stack_python_ver))
 load(pathJoin("cmake", cmake_ver))
 
 load("gsi_common")
+setenv("crtm_ROOT","/work/noaa/da/eliu/git/CRTMv3/build")
+setenv("crtm_VERSION","3.1.0")
+setenv("CRTM_INC","/work/noaa/da/eliu/git/CRTMv3/build/module/crtm/Intel/2021.5.0.20211109")
+setenv("CRTM_LIB","/work/noaa/da/eliu/git/CRTMv3/build/lib/libcrtm.so")
+setenv("CRTM_FIX","/work/noaa/da/eliu/git/CRTMv3-fix/Little_Endian")
+whatis("Name: crtm")
+whatis("Version: 3.1.0")
+whatis("Category: library")
+whatis("Description: crtm library")
+
 load(pathJoin("prod_util", prod_util_ver))
 
 pushenv("CFLAGS", "-xHOST")
