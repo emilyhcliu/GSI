@@ -474,7 +474,6 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   acft_profl_file = index(infile,'_profl')/=0
 
 ! Initialize variables
-
   kcount=0
   vdisterrmax=zero
   zflag=0
@@ -2020,7 +2019,8 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  end do
 
 !                Compute depth of guess pressure layersat observation location
-                 if (.not.twodvar_regional .and. levs > 1) then
+!emily           if (.not.twodvar_regional .and. levs > 1) then
+                 if (.not.twodvar_regional) then   !emily
                     do kk=1,nsig-1
                        dpres(kk)=presl(kk)-presl(kk+1)
                     end do
@@ -2297,10 +2297,15 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
               if(tob) then
                  ppb=obsdat(1,k)
                  if (aircraftobs .and. aircraft_t_bc .and. acft_profl_file) then
-                    call errormod_aircraft(pqm,tqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)
+                 !  call errormod_aircraft(pqm,tqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)             !orig
+                    call errormod_aircraft(c_station_id,plevs(k),obsdat(3,k)+t0c,pqm,tqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3) !emily
+
+                    write(200000,*) c_station_id, rstation_id
+    
                  else
                     call errormod(pqm,tqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm)
                  end if
+
                  toe=obserr(3,k)*errout
                  qtflg=tvflg(k) 
                  if (inflate_error) toe=toe*r1_2
@@ -2332,7 +2337,8 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  cdata_all(22,iout)=r_prvstg(1,1)          ! provider name
                  cdata_all(23,iout)=r_sprvstg(1,1)         ! subprovider name
                  cdata_all(24,iout)=obsdat(10,k)           ! cat
-                 cdata_all(25,iout)=var_jb(3,k)            ! non linear qc for T
+!emily           cdata_all(25,iout)=var_jb(3,k)            ! non linear qc for T
+                 cdata_all(25,iout)=errout                 ! error inflation factor from error model 
                  if (aircraft_t_bc_pof .or. aircraft_t_bc .or.aircraft_t_bc_ext) then
                     cdata_all(26,iout)=aircraftwk(1,k)     ! phase of flight
                     cdata_all(27,iout)=aircraftwk(2,k)     ! vertical velocity
@@ -2346,7 +2352,9 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
               else if(uvob) then 
 
                  if (aircraftobs .and. aircraft_t_bc .and. acft_profl_file) then
-                    call errormod_aircraft(pqm,wqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)
+                  ! call errormod_aircraft(pqm,wqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)      !orig
+                  ! call errormod_aircraft(c_station_id,pqm,tqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3) !emily
+                    call errormod(pqm,wqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm) !emily
                  else
                     call errormod(pqm,wqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm)
                  end if
@@ -2479,7 +2487,9 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
               else if(qob) then
                  qmaxerr=emerr
                  if (aircraftobs .and. aircraft_t_bc .and. acft_profl_file) then
-                    call errormod_aircraft(pqm,qqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)
+                 !  call errormod_aircraft(pqm,qqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)      !orig
+                 !  call errormod_aircraft(c_station_id,pqm,tqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3) !emily
+                    call errormod(pqm,wqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm) !emily
                  else
                     call errormod(pqm,qqm,levs,plevs,errout,k,presl,dpres,nsig,lim_qm)
                  end if

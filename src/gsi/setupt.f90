@@ -56,7 +56,7 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   use gridmod, only: get_ijk,pt_ll
   use jfunc, only: jiter,last,jiterstart,miter,hofx_2m_sfcfile
 
-  use guess_grids, only: nfldsig, hrdifsig,ges_lnprsl,&
+  use guess_grids, only: nfldsig, hrdifsig,ges_lnprsl,ges_prsl, &  !emily
        geop_hgtl,ges_tsen,pbl_height
   use guess_grids, only: ges_prsi
   use state_vectors, only: svars3d, levels, ns3d, svars2d
@@ -276,7 +276,7 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
   real(r_kind) err_input,err_adjst,err_final,tfact
   real(r_kind) cg_t,cvar,wgt,rat_err2,qcgross
   real(r_kind),dimension(nobs)::dup
-  real(r_kind),dimension(nsig):: prsltmp
+  real(r_kind),dimension(nsig):: prsltmp, prsltmp0 !emily
   real(r_kind),dimension(nele,nobs):: data
   real(r_kind),dimension(npredt):: predbias
   real(r_kind),dimension(npredt):: pred
@@ -477,41 +477,42 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
 !  handle multiple reported data at a station
   hr_offset=min_offset/60.0_r_kind
   dup=one
-  do k=1,nobs
-     ikx=nint(data(ikxx,k))
-     itype=ictype(ikx)
-     landsfctype =( itype==181 .or. itype==183 .or. itype==187 )
-     do l=k+1,nobs
-        if (twodvar_regional .or. (hofx_2m_sfcfile .and. landsfctype) ) then
-           duplogic=data(ilat,k) == data(ilat,l) .and.  &
-           data(ilon,k) == data(ilon,l) .and.  &
-           data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
-           muse(k) .and. muse(l)
-         else
-           duplogic=data(ilat,k) == data(ilat,l) .and.  &
-           data(ilon,k) == data(ilon,l) .and.  &
-           data(ipres,k) == data(ipres,l) .and. &
-           data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
-           muse(k) .and. muse(l)
-        end if
-
-        if (duplogic) then
-           if(l_closeobs) then
-              if(abs(data(itime,k)-hr_offset)<abs(data(itime,l)-hr_offset)) then
-                  muse(l)=.false.
-              else
-                  muse(k)=.false.
-              endif
-!              write(*,'(a,2f10.5,2I8,2L10)') 'chech obs time==',data(itime,k)-hr_offset,data(itime,l)-hr_offset,k,l,&
-!                           muse(k),muse(l)
-           else
-              tfact=min(one,abs(data(itime,k)-data(itime,l))/dfact1)
-              dup(k)=dup(k)+one-tfact*tfact*(one-dfact)
-              dup(l)=dup(l)+one-tfact*tfact*(one-dfact)
-           endif
-        end if
-     end do
-  end do
+!>>emily
+!  do k=1,nobs
+!     ikx=nint(data(ikxx,k))
+!     itype=ictype(ikx)
+!     landsfctype =( itype==181 .or. itype==183 .or. itype==187 )
+!     do l=k+1,nobs
+!        if (twodvar_regional .or. (hofx_2m_sfcfile .and. landsfctype) ) then
+!           duplogic=data(ilat,k) == data(ilat,l) .and.  &
+!           data(ilon,k) == data(ilon,l) .and.  &
+!           data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
+!           muse(k) .and. muse(l)
+!         else
+!           duplogic=data(ilat,k) == data(ilat,l) .and.  &
+!           data(ilon,k) == data(ilon,l) .and.  &
+!           data(ipres,k) == data(ipres,l) .and. &
+!           data(ier,k) < r1000 .and. data(ier,l) < r1000 .and. &
+!           muse(k) .and. muse(l)
+!        end if
+!
+!        if (duplogic) then
+!           if(l_closeobs) then
+!              if(abs(data(itime,k)-hr_offset)<abs(data(itime,l)-hr_offset)) then
+!                  muse(l)=.false.
+!              else
+!                  muse(k)=.false.
+!              endif
+!!              write(*,'(a,2f10.5,2I8,2L10)') 'chech obs time==',data(itime,k)-hr_offset,data(itime,l)-hr_offset,k,l,&
+!!                           muse(k),muse(l)
+!           else
+!              tfact=min(one,abs(data(itime,k)-data(itime,l))/dfact1)
+!              dup(k)=dup(k)+one-tfact*tfact*(one-dfact)
+!              dup(l)=dup(l)+one-tfact*tfact*(one-dfact)
+!           endif
+!        end if
+!     end do
+!  end do
 
 ! Run a buddy-check
 ! Note: buddy check crashes for hofx_2m_sfcfile option.
@@ -759,6 +760,10 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
           mype,nfldsig)
      call tintrp2a1(ges_lnprsl,prsltmp,dlat,dlon,dtime,hrdifsig,&
           nsig,mype,nfldsig)
+!>>emily
+     call tintrp2a1(ges_prsl,prsltmp0,dlat,dlon,dtime,hrdifsig,&
+          nsig,mype,nfldsig)
+!<<emily
 
 ! GEOVALS for UFO eval
      psges2  = psges          ! keep in cb
@@ -1925,6 +1930,7 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
     call nc_diag_metadata_to_single("Errinv_Input",errinv_input     )
     call nc_diag_metadata_to_single("Errinv_Adjust",errinv_adjst     )
     call nc_diag_metadata_to_single("Errinv_Final",errinv_final     )
+    call nc_diag_metadata_to_single("Error_Inflation_Factor_from_Errormod",data(ijb,i)     )
     if (hofx_2m_sfcfile ) then
       call nc_diag_metadata_to_single("Observation", tob            )
     else
@@ -2006,7 +2012,8 @@ subroutine setupt(obsLL,odiagLL,lunin,mype,bwork,awork,nele,nobs,is,conv_diagsav
        !zges_read_reverse(kk)= zges_read(k)
        !zges_geometric_reverse(kk)= zges_geometric(k)
        !zges_reverse(kk)     = zges(k)
-       prsltmp2_reverse(kk) = prsltmp2(k)
+       prsltmp2_reverse(kk) = prsltmp2(k)  !orig
+       prsltmp2_reverse(kk) = prsltmp0(k)  !emily
     enddo
     do k = 1, nsig+1
        kk  = (nsig+1)-k+1

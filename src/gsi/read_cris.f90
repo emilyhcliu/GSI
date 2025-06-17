@@ -714,7 +714,7 @@ subroutine read_cris(mype,val_cris,ithin,isfcalc,rmesh,jsatid,gstime,&
 
 !          Set common predictor parameters
 
-           crit1 = crit1 + rlndsea(isflg)
+!emily           crit1 = crit1 + rlndsea(isflg)
 
 !          CrIS data read radiance values and channel numbers
 !          Read CRIS channel number(CHNM) and radiance (SRAD)
@@ -791,14 +791,14 @@ subroutine read_cris(mype,val_cris,ithin,isfcalc,rmesh,jsatid,gstime,&
            endif  ! clearest FOV check
 
            pred = max(zero,pred)
-           crit1 = crit1 + pred
+!emily           crit1 = crit1 + pred
 
 !          Map obs to grids
-           if ( clear ) then  
+!emily           if ( clear ) then  
               call checkob(dist1,crit1,itx,iuse)
-           else
-              call checkob(one,crit1,itx,iuse)
-           endif
+!emily           else
+!emily              call checkob(one,crit1,itx,iuse)
+!emily           endif
            if(.not. iuse) cycle read_loop
 
 !          Convert radiance to BT loop

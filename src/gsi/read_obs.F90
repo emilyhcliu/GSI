@@ -1487,7 +1487,7 @@ subroutine read_obs(ndata,mype)
                          nobs_sub1(1,i),read_rec(i))
                     string='READ_SAILDRONE'
                 else
-                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&
+                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&        !orig
                         prsl_full,nobs_sub1(1,i),read_rec(i))
                    string='READ_PREPBUFR'
                 endif
@@ -1505,7 +1505,7 @@ subroutine read_obs(ndata,mype)
                                      , nobs_sub1(1,i))
                     string='READ_SATMAR'
                  else 
-                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&
+                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&        !orig
                         prsl_full,nobs_sub1(1,i),read_rec(i))
                    string='READ_PREPBUFR'
 
@@ -1516,7 +1516,7 @@ subroutine read_obs(ndata,mype)
                                        nobs_sub1(1,i))
                    string='READ_ASCII_MITM'
                  else
-                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&
+                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&       !orig
                         prsl_full,nobs_sub1(1,i),read_rec(i))
                    string='READ_PREPBUFR'
                  endif
@@ -1527,7 +1527,7 @@ subroutine read_obs(ndata,mype)
                                        nobs_sub1(1,i))
                    string='READ_ASCII_MXTM'
                  else
-                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&
+                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&       !orig
                         prsl_full,nobs_sub1(1,i),read_rec(i))
                    string='READ_PREPBUFR'
                  endif
@@ -1541,7 +1541,7 @@ subroutine read_obs(ndata,mype)
                    string='READ_GOESIMGR_SKYCOVER'
                 else
 !              else read from prepbufr
-                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,prsl_full, &
+                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,prsl_full, &       !orig
                          nobs_sub1(1,i),read_rec(i))
                    string='READ_PREPBUFR'
                 end if
@@ -1582,7 +1582,7 @@ subroutine read_obs(ndata,mype)
                        nobs_sub1(1,i),read_rec(i))
                     string='READ_SAILDRONE'
                 else
-                  call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&
+                  call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&       !orig
                      prsl_full,nobs_sub1(1,i),read_rec(i))
                   string='READ_PREPBUFR'
                 endif
@@ -1604,7 +1604,7 @@ subroutine read_obs(ndata,mype)
                       call stop2(999)
                    endif
 
-                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&
+                   call read_prepbufr(nread,npuse,nouse,infile,obstype,lunout,twind,sis,&       !orig
                         prsl_full,nobs_sub1(1,i),read_rec(i))
                    string='READ_PREPBUFR'
                 endif

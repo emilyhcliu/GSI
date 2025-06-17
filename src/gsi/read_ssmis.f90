@@ -113,7 +113,8 @@ subroutine read_ssmis(mype,val_ssmis,ithin,isfcalc,rmesh,jsatid,gstime,&
   use m_sortind
   use mpimod, only: npe
 ! use radiance_mod, only: rad_obs_type
- 
+  use gsi_4dvar, only: thin4d  !emily
+
   implicit none
 
 ! Declare passed variables
@@ -470,6 +471,13 @@ subroutine read_ssmis(mype,val_ssmis,ithin,isfcalc,rmesh,jsatid,gstime,&
 
         crit0 = 0.01_r_kind
         timeinflat=6.0_r_kind
+        write(6,*)'emily checking n_tbin     = ', n_tbin 
+        write(6,*)'emily checking thin4d     = ', thin4d 
+        write(6,*)'emily checking tdiff      = ', tdiff
+        write(6,*)'emily checking ptime      = ', ptime
+        write(6,*)'emily checking ithin_time = ', ithin_time
+        write(6,*)'emily checking timeinflat = ', timeinflat
+        write(6,*)'emily checking crit0      = ', crit0
         call tdiff2crit(tdiff,ptime,ithin_time,timeinflat,crit0,crit1,it_mesh)
 
 !       Extract obs location, TBB, other information
@@ -538,7 +546,7 @@ subroutine read_ssmis(mype,val_ssmis,ithin,isfcalc,rmesh,jsatid,gstime,&
      allocate(sorted_index(num_obs))
      relative_time_in_seconds  = 3600.0_r_kind*t4dv_save(1:num_obs)  
      sorted_index              = sortind(relative_time_in_seconds)  
-     
+!>>orig
 !    Sort data according to observation time in ascending order  
      relative_time_in_seconds(1:num_obs) = relative_time_in_seconds(sorted_index)
      rsat_save(1:num_obs)                = rsat_save(sorted_index)
@@ -555,21 +563,21 @@ subroutine read_ssmis(mype,val_ssmis,ithin,isfcalc,rmesh,jsatid,gstime,&
      solzen_save(1:num_obs)              = solzen_save(sorted_index)
      solazi_save(1:num_obs)              = solazi_save(sorted_index)
      bt_save(:,1:num_obs)                = bt_save(:,sorted_index)
-
+!<<orig
 !    call cpu_time(sort_time2)
 !    write(*,*)'READ_SSMIS: cpu_time (sorting)  ', sort_time2-sort_time1
-!    write(*,*)'READ_SSMIS: min/max time        ', minval(relative_time_in_seconds(1:num_obs)), &
-!                                                  maxval(relative_time_in_seconds(1:num_obs))  
-!    write(*,*)'READ_SSMIS: min/max lat         ', minval(dlat_earth_save(1:num_obs)), &
-!                                                  maxval(dlat_earth_save(1:num_obs))  
-!    write(*,*)'READ_SSMIS: min/max lon         ', minval(dlon_earth_save(1:num_obs)), &
-!                                                  maxval(dlon_earth_save(1:num_obs))  
+    write(*,*)'READ_SSMIS: min/max time        ', minval(relative_time_in_seconds(1:num_obs)), &
+                                                  maxval(relative_time_in_seconds(1:num_obs))  
+    write(*,*)'READ_SSMIS: min/max lat         ', minval(dlat_earth_save(1:num_obs)), &
+                                                  maxval(dlat_earth_save(1:num_obs))  
+    write(*,*)'READ_SSMIS: min/max lon         ', minval(dlon_earth_save(1:num_obs)), &
+                                                  maxval(dlon_earth_save(1:num_obs))  
 !    write(*,*)'READ_SSMIS: min/max iscan_save  ', minval(iscan_save(1:num_obs)), & 
 !                                                  maxval(iscan_save(1:num_obs))  
-!    write(*,*)'READ_SSMIS: min/max ifov_save   ', minval(ifov_save(1:num_obs)), &
-!                                                  maxval(ifov_save(1:num_obs))  
-!    write(*,*)'READ_SSMIS: min/max bt_save     ', minval(bt_save(:,1:num_obs)), &
-!                                                  maxval(bt_save(:,1:num_obs))  
+    write(*,*)'READ_SSMIS: min/max ifov_save   ', minval(ifov_save(1:num_obs)), &
+                                                  maxval(ifov_save(1:num_obs))  
+    write(*,*)'READ_SSMIS: min/max bt_save     ', minval(bt_save(:,1:num_obs)), &
+                                                  maxval(bt_save(:,1:num_obs))  
 
 !========================================================================================================================
 

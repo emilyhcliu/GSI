@@ -830,7 +830,8 @@ end subroutine errormod
     return
 end subroutine errormod_hdraob
 
-  subroutine errormod_aircraft(pq,vq,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)
+! subroutine errormod_aircraft(pq,vq,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)      !orig
+  subroutine errormod_aircraft(c_station_id,pob,vob,pq,vq,levs,plevs,errout,k,presl,dpres,nsig,lim_qm,hdr3)      !orig
 !$$$  subprogram documentation block
 !                .      .    .                                       .
 ! subprogram:    errormod_aircraft
@@ -866,24 +867,28 @@ end subroutine errormod_hdraob
     use aircraftinfo, only: hdist_aircraft
     implicit none
 
+    character(8)                        ,intent(in   ) :: c_station_id       !emily
     integer(i_kind)                     ,intent(in   ) :: levs,k,nsig,lim_qm
+    real(r_kind)                        ,intent(in   ) :: pob    !emily
+    real(r_kind)                        ,intent(in   ) :: vob    !emily
     real(r_kind)   ,dimension(255)      ,intent(in   ) :: plevs
     real(r_kind)   ,dimension(nsig)     ,intent(in   ) :: presl
     real(r_kind)   ,dimension(nsig-1)   ,intent(in   ) :: dpres
     integer(i_kind),dimension(255)      ,intent(in   ) :: pq,vq
     real(r_kind)                        ,intent(inout) :: errout
-    real(r_double),dimension(3,255),optional,intent(in) :: hdr3
+    real(r_double),dimension(3,255),optional,intent(in) :: hdr3     !orig
 
-    integer(i_kind) n,l,ilev
-    real(r_kind):: vmag,pdiffu,pdiffd,con
+    integer(i_kind) n,l,ilev  !orig
+    real(r_kind):: vmag,pdiffu,pdiffd,con !orig
+    real(r_kind):: tmpu,tmpd,distu,distd !orig
     real(r_kind):: rlatk,rlonk,rlatl,rlonl,dist1,dist2,dist3,dist
     logical latlon_check
 
     errout=one
-    if(levs == 1)return
+!    if(levs == 1)return  !orig
 
     latlon_check=.false.
-    if (present(hdr3)) latlon_check=.true.
+    if (present(hdr3)) latlon_check=.true.  !orig
     if (latlon_check) then
        rlatk=hdr3(2,k)*deg2rad
        rlonk=hdr3(1,k)*deg2rad
@@ -905,6 +910,7 @@ end subroutine errormod_hdraob
 
 ! Array plevs is only defined from l=1 to l=levs.  Hence the check below
        if (l+1<=levs) then
+          tmpu = abs(plevs(k)-plevs(l+1))  !emily
           upprof: do while (abs(plevs(k)-plevs(l+1)) < vmag .and. l <= levs-1)
              l=l+1
              if(pq(l) < lim_qm .and. vq(l) < lim_qm)then
@@ -917,6 +923,7 @@ end subroutine errormod_hdraob
                    dist3=sin(rlatk)-sin(rlatl)
                    dist=min(one,sqrt(dist1*dist1+dist2*dist2+dist3*dist3))
                    dist=rearth_equator*two*asin(dist/two)
+                   distu=dist !emily
                    if (dist>hdist_aircraft) pdiffu=vmag
                 end if
                 exit upprof
@@ -930,6 +937,7 @@ end subroutine errormod_hdraob
 
 ! The check (l>=2) ensures that plevs(l-1) is defined
        if (l>=2) then
+          tmpd = abs(plevs(l-1)-plevs(k)) !emily
           dwprof: do while (abs(plevs(l-1)-plevs(k)) < vmag .and. l >= 2)
              l=l-1
              if(pq(l) < lim_qm .and. vq(l) < lim_qm)then
@@ -942,6 +950,7 @@ end subroutine errormod_hdraob
                    dist3=sin(rlatk)-sin(rlatl)
                    dist=min(one,sqrt(dist1*dist1+dist2*dist2+dist3*dist3))
                    dist=rearth_equator*two*asin(dist/two)
+                   distd=dist !emily
                    if (dist>60000.0_r_kind) pdiffd=vmag
                 end if
                 exit dwprof
@@ -957,6 +966,37 @@ end subroutine errormod_hdraob
     else
        errout=1.e6_r_kind
     end if
+
+!    write(100000,600) 'station_id', 'lon', 'lat', 'nlev', 'k', 'pqm', 'tqm', 'ilev', 'presl@ilev','vmag', 'distu', 'distd','pdiffu', 'pdiffd', 'errout'
+!    write(100000,601) c_station_id, hdr3(1,k), hdr3(2,k), levs, k, pq(k), vq(k), ilev, presl(ilev), vmag, distu, distd, pdiffu, pdiffd, errout
+!601 format(a12, 2x, 2(f8.3,2x), 5(i6,2x), 7(ES25.18,2x))
+!600 format(a12, 2x, 2(a8  ,2x), 5(a6,2x), 7(a25,    2x))
+
+    write(100000,600) c_station_id, hdr3(1,k), hdr3(2,k), levs, k, pob, vob, pq(k), vq(k), ilev, presl(ilev), dpres(ilev), vmag, distu, distd, &
+                      tmpu, tmpd, pdiffu, pdiffd, errout
+
+600 format('ob_sid = ',   a12,     2x, &
+           'ob_lat = ',   f8.3,    2x, &
+           'ob_lon = ',   f8.3,    2x, &
+           'ob_levs = ',  i6,      2x, &
+           'ob_k = ',     i6,      2x, &
+           'ob_p = ',     ES25.18, 2x, &
+           'ob_t = ',     ES25.18, 2x, &
+           'pqm = ',      i6,      2x, &
+           'tqm = ',      i6,      2x, &
+           'thislev = ',  i6,      2x, &
+           'thislevp = ', ES25.18, 2x, &
+           'thislevdp = ',ES25.18, 2x, &
+           'vmag = ',     ES25.18, 2x, &
+           'distu = ',    ES25.18, 2x, &
+           'distd = ',    ES25.18, 2x, &
+           'tmpu = ',     ES25.18, 2x, &
+           'tmpd = ',     ES25.18, 2x, &
+           'pdiffu = ',   ES25.18, 2x, &
+           'pdiffd = ',   ES25.18, 2x, &
+           'errfact = ',  ES25.18      )
+
+
 
     return
 end subroutine errormod_aircraft

@@ -116,8 +116,13 @@ CONTAINS
              t1    = t2
           endif
           scanline(iobs) = nscan
+       write(219,101) iobs, time(iobs), fov(iobs), lat(iobs), lon(iobs), minval(bt_inout(:,iobs)), maxval(bt_inout(:,iobs))  
        enddo
+101    format(i6,2x,f12.3,2x,i6,2x,2(f12.5,2x),2(f12.5,2x))
+102    format(24(f8.3,2x))
        max_scan = maxval(scanline)
+       write(219, * ) 'num_obs  = ', num_obs  
+       write(219, * ) 'max_scan = ', max_scan  
        write(*,*) 'SSMIS_Spatial_Average: max_scan,max_fov,nchanl = ', &
                  max_scan,max_fov,nchanl
 
@@ -139,6 +144,9 @@ CONTAINS
           longitude(fov(iobs),scanline(iobs))      = lon(iobs) 
           bt_image_orig(fov(iobs),scanline(iobs),:)= bt_inout(:,iobs)
           scanline_back(fov(iobs),scanline(iobs))  = iobs
+          write(419,201) iobs,latitude(fov(iobs),scanline(iobs)),longitude(fov(iobs),scanline(iobs)),scanline_back(fov(iobs),scanline(iobs)),fov(iobs), &
+          nodeinfo(fov(iobs),scanline(iobs)),minval(bt_image_orig(fov(iobs),scanline(iobs),:)),maxval(bt_image_orig(fov(iobs),scanline(iobs),:))  
+201       format(i6,2x,2(f12.5,2x),3(i6,2x),2(f12.5,2x))
        enddo
 
 !      Determine AS/DS node information for each scanline
@@ -156,6 +164,19 @@ CONTAINS
           enddo loop2
        enddo loop1
        nodeinfo(:,max_scan) = nodeinfo(:,max_scan-1)
+
+!>>emily
+       loopa: do iscan = 1, max_scan-1
+          loopb: do ifov = 1, max_fov
+             if (scanline_back(ifov,iscan) > 0 .and. scanline_back(ifov,iscan+1) > 0) then
+                dlat = latitude(ifov,iscan+1)-latitude(ifov,iscan)
+             endif
+             write(519,501) iscan,ifov,dlat,latitude(ifov,iscan+1),latitude(ifov,iscan),longitude(ifov,iscan),scanline_back(ifov,iscan), &
+                     nodeinfo(ifov,iscan), minval(bt_image_orig(ifov,iscan,:)),maxval(bt_image_orig(ifov,iscan,:))  
+          enddo loopb
+       enddo loopa
+501    format(2(i6,2x), 3(es25.18,2x), (f12.5,2x), 2(i6,2x), 2(f12.5,2x)) 
+!<<emily
 
 !      Do spatial averaging in the box centered on each fov for each channel
 !$omp parallel do  schedule(dynamic,1)private(ic,iobs,iscan,ifov,ns1,ns2,np1,np2,xnum,mta,is,ip,lat1,lon1,lat2,lon2,dist,wgt)
@@ -179,7 +200,7 @@ CONTAINS
                    xnum   = 0.0_r_kind
                    mta    = 0.0_r_kind
                    if (any(bt_image_orig(np1:np2,ns1:ns2,ic) < btmin .or. &
-                           bt_image_orig(np1:np1,ns1:ns2,ic) > btmax)) then 
+                           bt_image_orig(np1:np2,ns1:ns2,ic) > btmax)) then 
                       bt_inout(ic,iobs) = 1000.0_r_kind 
                    else
                      ! Calculate distance of each fov to the center fov 
