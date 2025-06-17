@@ -148,11 +148,15 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 !
 !   2020-05-04  wu      - no rotate_wind for fv3_regional
 !   2020-09-05  CAPS(C. Tong) - add flag for new vadwind obs to assimilate around the analysis time only
+!   2022-04-16  pondeca - add bias correction multiplicative factor windbiasfact
 !   2023-03-23  draper  - add code for processing T2m and q2m for global system
 !   2023-07-30  zhao    - added code to extract obs of significant wave height (howvob) from bufr record 
 !                         in prepbufr file for 3D analysis
 !   2024-01-11  zhao    - added code to extract sensible temp (tdry) and tv flag
 !                         for moisture obs(qob) when running (2D/3D)RTMA
+!   2025-05-12  collard - Logic to reset ship surface pressure to SLP when height is zero.
+!   2025-05-19  collard - Saildrone subtype introduced in GSI (not in prepobs) kx=180,280 subtype=02
+!                         (copied from release/gfsda.v16)
 
 !   input argument list:
 !     infile   - unit from which to read BUFR data
@@ -177,7 +181,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   use kinds, only: r_single,r_kind,r_double,i_kind
   use constants, only: zero,one_tenth,one,deg2rad,fv,t0c,half,&
       three,four,rad2deg,tiny_r_kind,huge_r_kind,huge_i_kind,&
-      r60inv,r10,r100,r2000
+      r60inv,r10,r100,r1000,r2000
   use constants,only: rearth,stndrd_atmos_ps,rd,grav
   use gridmod, only: diagnostic_reg,regional,nlon,nlat,nsig,&
       tll2xy,txy2ll,rotate_wind_ll2xy,rotate_wind_xy2ll,&
@@ -206,7 +210,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   use gsi_4dvar, only: l4dvar,l4densvar,time_4dvar,winlen,thin4d
   use convthin, only: make3grids,map3grids_m,del3grids,use_all
   use convthin_time, only: make3grids_tm,map3grids_m_tm,del3grids_tm,use_all_tm
-  use qcmod, only: errormod,errormod_aircraft,noiqc,newvad,njqc
+  use qcmod, only: errormod,errormod_aircraft,noiqc,newvad,njqc,sfcwndob_biasc
   use qcmod, only: pvis,pcldch,scale_cv,estvisoe,estcldchoe,vis_thres,cldch_thres
   use qcmod, only: nrand
   use nltransf, only: nltransf_forward
@@ -214,11 +218,14 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   use blacklist, only : blkstns,blkkx,ibcnt
   use sfcobsqc,only: init_rjlists,get_usagerj,get_gustqm,destroy_rjlists
   use sfcobsqc,only: init_gsd_sfcuselist,apply_gsd_sfcuselist,destroy_gsd_sfcuselist                       
+  use sfcobsqc,only: init_sfcuselist,apply_sfcuselist,destroy_sfcuselist
+  use sfcobsqc,only: get_wbias_afactor
   use windht,only: init_windht_lists,readin_windht_list,destroy_windht_lists,find_wind_height
   use hilbertcurve,only: init_hilbertcurve, accum_hilbertcurve, &
                          apply_hilbertcurve,destroy_hilbertcurve
   use ndfdgrids,only: init_ndfdgrid,destroy_ndfdgrid,relocsfcob,adjust_error
-  use jfunc, only: tsensible, hofx_2m_sfcfile
+  use ndfdgrids,only: valley_adjustment
+  use jfunc, only: tsensible, hofx_2m_sfcfile, ignore_2mQM
   use deter_sfc_mod, only: deter_sfc_type,deter_sfc2
   use gsi_nstcouplermod, only: nst_gsi,nstinfo
   use gsi_nstcouplermod, only: gsi_nstcoupler_deter
@@ -330,7 +337,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   integer(i_kind) idummy1,idummy2,glret,lindx !glret>0 means GLERL code exists.Others are dummy variables
   real(r_kind) time,timex,time_drift,timeobs,toff,t4dv,zeps
   real(r_kind) qtflg,tdry,rmesh,ediff,usage,ediff_ps,ediff_q,ediff_t,ediff_uv,ediff_pw
-  real(r_kind) u0,v0,uob,vob,dx,dy,dx1,dy1,w00,w10,w01,w11
+  real(r_kind) u0,v0,uob,vob,rgustob,dx,dy,dx1,dy1,w00,w10,w01,w11
   real(r_kind) qoe,qobcon,pwoe,pwmerr,dlnpob,ppb,poe,gustoe,visoe,qmaxerr
   real(r_kind) toe,woe,errout,oelev,dlat,dlon,sstoe,dlat_earth,dlon_earth
   real(r_kind) tdoe,mxtmoe,mitmoe,pmoe,howvoe,cldchoe
@@ -356,9 +363,14 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   real(r_kind) :: tempvis,visout
   real(r_kind) :: tempcldch,cldchout
   real(r_kind) :: windsensht
+  real(r_kind) :: windbiasfact
 
   real(r_double) rstation_id,qcmark_huge
+#ifdef BUFR12
+  integer(i_kind) vtcd,glcd !virtual temp program code and GLERL program code
+#else
   real(r_double) vtcd,glcd !virtual temp program code and GLERL program code
+#endif
   real(r_double),dimension(8):: hdr,hdrtsb
   real(r_double),dimension(3,255):: hdr3
   real(r_double),dimension(8,255):: drfdat,qcmark,obserr,var_jb
@@ -397,6 +409,10 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   integer(i_kind),dimension(1,255):: tqm4q
   real(r_kind),dimension(1,255):: tvflg4q
   real(r_double),dimension(1,255):: tobs4q
+
+! Using valley map for 3DRTMA
+  logical      :: outside_obs
+  real(r_kind) :: x_obs, y_obs
 
 !  equivalence to handle character names
   equivalence(r_prvstg(1,1),c_prvstg) 
@@ -447,7 +463,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 
   integer:: icase,klev,ikkk,tkk
   real:: diffhgt,diffuu,diffvv
-  integer,dimension(3)::kcount
+  integer,dimension(5)::kcount
 
   real(r_double),dimension(3,1500):: fcstdat
   logical print_verbose
@@ -496,7 +512,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
      iqm = 10
      iuse = 12
   else if(uvob) then 
-     nreal=26
+     nreal=27
      iqm = 12
      iuse = 14
   else if(spdob) then
@@ -524,7 +540,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
      iqm = 11
      iuse = 13
   else if(gustob) then
-     nreal=21
+     nreal=22
      iqm = 11
      iuse = 12
   else if(visob) then
@@ -785,6 +801,8 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
           else
             iobsub=01
           endif
+          ! Set saildrone to subtype 02
+          if (nint(hdr(3)) == 560) iobsub = 02
         endif
 ! Su suggested to keep both 289 and 290.  But trunk only keep 290
 !       if(kx == 289 .or. kx == 290) iobsub=hdr(2)
@@ -880,19 +898,28 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   else
      !warn that GLERL adjustment is not available.
      print*, "WARNING: GLERL program code not in this file."
+#ifdef BUFR12     
+     glcd=-999
+#else
      glcd=-999._r_double
+#endif
   endif
 
+#ifdef BUFR12
+  if(print_verbose) write(6,'(1x,A,A,A,2(A,1x,I8))') 'read_prepbufr:',        &
+     trim(adjustl(obstype)),':', '  vtcd= ',vtcd,'  glcd= ',glcd
+#else
   if(print_verbose) write(6,'(1x,A,A,A,2(A,1x,F8.3))') 'read_prepbufr:',        &
      trim(adjustl(obstype)),':', '  vtcd= ',vtcd,'  glcd= ',glcd
-
+#endif  
   call init_rjlists
   call init_aircraft_rjlists
   if(i_gsdsfc_uselist==1) call init_gsd_sfcuselist
+  if(i_gsdsfc_uselist==2) call init_sfcuselist
 
   if (lhilbert) call init_hilbertcurve(maxobs)
 
-  if (twodvar_regional) then
+  if (twodvar_regional .or. l_rtma3d) then
      call init_ndfdgrid
      call init_windht_lists !load wind sensor height provider lists
   endif
@@ -1680,9 +1707,8 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
               pmq(k)=nint(qcmark(8,k))
            end do
 
-!          187, 181, and 183 are the screen-level obs over land
-!          note: don't need the hofx_2m_sfcfile if set usage in convinfo, and qm updated in the input file
-           global_2m_land = ( (kx==187 .or. kx==181 .or. kx==183) .and. hofx_2m_sfcfile )
+!          187 and 181, are the screen-level obs over land
+           global_2m_land = ( (kx==187 .or. kx==181) .and. hofx_2m_sfcfile )
 
 !          If temperature ob, extract information regarding virtual
 !          versus sensible temperature
@@ -1823,9 +1849,8 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  qm=sstq
               else if(gustob) then
                  gustqm=0
-                 if (kx==188 .or. kx==288 .or. kx==195 .or. kx==295 ) &
+                 if (i_gsdsfc_uselist/=2 ) &
                  call get_gustqm(kx,c_station_id,c_prvstg,c_sprvstg,gustqm)
-                 if ( l_rtma3d ) gustqm = 0  ! skipping get_gustqm for 3drtma run (missing list file)
                  qm=gustqm
               else if(visob) then
                  visqm=0    ! need to fix this later
@@ -2007,21 +2032,17 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 
 !             Over-ride QM=9 and hard-wire errors for land obs and hofx_sfc_file option
 !             Can be deleted once prepbufr processing updated.
-              if ( global_2m_land ) then
+              if ( global_2m_land .and. ignore_2mQM ) then
                 if (tob .and. qm==9 ) then
-                     pqm(k)=2 ! otherwise, type 183 will be discarded.
                      qm=2
                      tqm(k)=2
-                     if (kx==187) obserr(3,k)=2.0_r_double
-                     if (kx==181) obserr(3,k)=2.0_r_double
-                     if (kx==183) obserr(3,k)=2.0_r_double
+                     obserr(3,k)=2.0_r_double
                 endif
                 if (qob .and. qm == 9 ) then 
-                     qm = 2
+                     qm=2
+                     qqm(k) = 2
                      ! qob err specified as fraction of qsat, multiplied by 10.
-                     if (kx==187) obserr(2,k)=1.0_r_double
-                     if (kx==181) obserr(2,k)=1.0_r_double
-                     if (kx==183) obserr(2,k)=1.0_r_double
+                     obserr(2,k)=1.0_r_double
                 endif
               endif
 !             Set usage variable              
@@ -2044,19 +2065,46 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  usage=100._r_kind
               end if
 
+              windbiasfact=one
+
               if (sfctype) then 
                  if (i_gsdsfc_uselist==1 ) then
                     if (kx==188 .or. kx==195 .or. kx==288.or.kx==295)  &
                     call apply_gsd_sfcuselist(kx,obstype,c_station_id,c_prvstg,c_sprvstg, &
                                             usage)
+                 elseif (i_gsdsfc_uselist==2 ) then
+                    if (kx==188 .or. kx==195 .or. kx==288.or.kx==295) then
+                       call apply_sfcuselist(kx,obstype,c_station_id,c_prvstg,c_sprvstg, &
+                                               dlon_earth,dlat_earth,usage)
+                       if (gustob .and. usage>=r6) then ; gustqm=r10 ; qm=gustqm ; endif
+                    endif
                  else
                     call get_usagerj(kx,obstype,c_station_id,c_prvstg,c_sprvstg, &
                                             dlon_earth,dlat_earth,idate,t4dv-toff,      &
                                             obsdat(5,k),obsdat(6,k),usage)
                  endif
+
+                 if (l_rtma3d .or. twodvar_regional) then
+                    call tll2xy(dlon_earth,dlat_earth,x_obs,y_obs,outside_obs)
+                    if ((trim(obstype)=='t' .or. trim(obstype)=='q') .and. .not.outside_obs) then
+                       call valley_adjustment(x_obs,y_obs,usage)
+                    end if
+                 end if
+
                  !retrieve wind sensor height
                  if (twodvar_regional)  then
                     if ( kx==288.or.kx==295 .or. (gustob .and. (kx==188.or.kx==195)) )  then
+                       call find_wind_height(c_prvstg,c_sprvstg,windsensht,kcount)
+                    endif
+                 endif
+                 if (sfcwndob_biasc) then
+                    if ( kx==288.or.kx==295 .or. (gustob .and. (kx==188.or.kx==195)) )  then
+                       call get_wbias_afactor(kx,obstype,c_station_id,c_prvstg,c_sprvstg,windbiasfact)
+                    endif
+                 endif
+                 !retrieve wind sensor height for mesonet gustob only when running 3DRTMA
+                 if (l_rtma3d)  then
+                    if ( gustob .and. (kx==188.or.kx==195) )  then
                        call find_wind_height(c_prvstg,c_sprvstg,windsensht,kcount)
                     endif
                  endif
@@ -2232,14 +2280,19 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                        call accum_hilbertcurve(usage,c_station_id,c_prvstg,c_sprvstg, &
                        dlat_earth,dlon_earth,dlat,dlon,t4dv,toff,nc,kx,iout)
 
+!             If a ship pressure observation with a zero height, reset pressure to sea level pressure
+!             Meta Sienkiewicz has discovered that when measured pressure and sea-level pressure 
+!             disagree when the height is zero, it usually means the height is not being properly reported.
+              if (psob .and. kx==180 .and. abs(obsdat(4,k))<tiny_r_kind .and. &
+                      abs(obsdat(13,k)-r1000)<200_r_kind) plevs(k) = obsdat(13,k)*one_tenth
 
 !             Extract pressure level and quality marks
               dlnpob=log(plevs(k))  ! ln(pressure in cb)
 
- 
-               if(qm >= 8 .or. usage >= 100.0_r_kind)then
-                  rusage(iout)=.false.
-               end if
+              if(qm >= 8 .or. usage >= 100.0_r_kind)then
+                 rusage(iout)=.false.
+              end if
+              
 !             Temperature
               if(tob) then
                  ppb=obsdat(1,k)
@@ -2312,6 +2365,12 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                     end if
                  endif
 
+                 if (sfcwndob_biasc) then
+                    if (kx==288.or.kx==295)  then
+                        uob=uob*windbiasfact
+                        vob=vob*windbiasfact
+                    endif 
+                 endif
 
                  cdata_all(1,iout)=woe                     ! wind error
                  cdata_all(2,iout)=dlon                    ! grid relative longitude
@@ -2341,9 +2400,10 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  cdata_all(24,iout)=obsdat(10,k)           ! cat
                  cdata_all(25,iout)=var_jb(5,k)            ! non linear qc parameter
                  cdata_all(26,iout)=one                    ! hilbert curve weight, modified later 
+                 cdata_all(27,iout)=windbiasfact           ! bias correction factor
                  if(perturb_obs)then
-                    cdata_all(27,iout)=ran01dom()*perturb_fact ! u perturbation
-                    cdata_all(28,iout)=ran01dom()*perturb_fact ! v perturbation
+                    cdata_all(28,iout)=ran01dom()*perturb_fact ! u perturbation
+                    cdata_all(29,iout)=ran01dom()*perturb_fact ! v perturbation
                  endif
  
               else if(spdob) then 
@@ -2385,7 +2445,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
 !             Surface pressure 
               else if(psob) then
 
-                 poe=obserr(1,k)*one_tenth                  ! convert from mb to cb
+                 poe=obserr(1,k)*one_tenth                 ! convert from mb to cb
                  if (inflate_error) poe=poe*r1_2
                  cdata_all(1,iout)=poe                     ! surface pressure error (cb)
                  cdata_all(2,iout)=dlon                    ! grid relative longitude
@@ -2566,7 +2626,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                    if ((kx==280).or.(kx==180)) oelev=r20+selev
                    if ((kx==299).or.(kx==199)) oelev=r20+selev
                    if ((kx==282).or.(kx==182)) oelev=r20+selev
-                   if (((kx==295).or.(kx==288).or.(kx==195).or.(kx==188)).and.twodvar_regional) then
+                   if (((kx==295).or.(kx==288).or.(kx==195).or.(kx==188)).and.(twodvar_regional.or.l_rtma3d)) then
                       !account for mesonet wind sensor height
                       oelev=windsensht+selev
                    end if
@@ -2576,14 +2636,23 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                       selev=zero
                    end if
 
+                   uob=obsdat(5,k)
+                   vob=obsdat(6,k)
+                   rgustob=obsdat(8,k)
+
                    if ((kx==188).or.(kx==288) .or.(kx==195) .or.(kx==295)) then
 !                     gustoe=2.5
                       gustoe=1.0
                       if ( l_rtma3d .and. oerr_gust > 0.0_r_kind ) gustoe = oerr_gust
-                      windcorr=abs(obsdat(5,k))<1.0 .and. abs(obsdat(6,k))<1.0 .and. obsdat(8,k)>10.0
+                      if (sfcwndob_biasc) then
+                         uob=uob*windbiasfact
+                         vob=vob*windbiasfact
+                         rgustob=rgustob*windbiasfact
+                      endif
+                      windcorr=abs(uob)<1.0 .and. abs(vob)<1.0 .and. rgustob>10.0
                       if (windcorr) gustoe=gustoe*1.5_r_kind
 
-                      if (abs(obsdat(8,k)-sqrt(obsdat(5,k)**2+obsdat(6,k)**2))<1.5) then
+                      if (abs(rgustob-sqrt(uob**2+vob**2))<1.5) then
                          gustoe=gustoe*1.5_r_kind
                       end if
                    end if
@@ -2595,7 +2664,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  cdata_all(3,iout)=dlat                    ! grid relative latitude
                  cdata_all(4,iout)=dlnpob                  ! ln(pressure in cb)
                  cdata_all(5,iout)=oelev                   ! observation height
-                 cdata_all(6,iout)=obsdat(8,k)             ! wind gusts obs
+                 cdata_all(6,iout)=rgustob                 ! wind gusts obs
                  cdata_all(7,iout)=rstation_id             ! station id
                  cdata_all(8,iout)=t4dv                    ! time
                  cdata_all(9,iout)=nc                      ! type
@@ -2612,6 +2681,7 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
                  cdata_all(19,iout)=selev                  ! station elevation (m)
                  cdata_all(20,iout)=r_prvstg(1,1)          ! provider name
                  cdata_all(21,iout)=r_sprvstg(1,1)         ! subprovider name
+                 cdata_all(22,iout)=windbiasfact           ! bias correction factor
 
 !             Visibility
               else if(visob) then
@@ -3302,8 +3372,9 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   call destroy_rjlists
   call destroy_aircraft_rjlists
   if(i_gsdsfc_uselist==1) call destroy_gsd_sfcuselist
+  if(i_gsdsfc_uselist==2) call destroy_sfcuselist
   if (lhilbert) call destroy_hilbertcurve
-  if (twodvar_regional) then
+  if (twodvar_regional .or. l_rtma3d) then
      call destroy_ndfdgrid
      call destroy_windht_lists
   endif
@@ -3316,6 +3387,10 @@ subroutine read_prepbufr(nread,ndata,nodata,infile,obstype,lunout,twindin,sis,&
   if(print_verbose)write(6,*)'READ_PREPBUFR:  closbf(',lunin,')'
   if (twodvar_regional .and. (uvob .or. gustob .or. spdob))  then
     write(6,*) 'kcount values from find wind height = ',kcount
+  end if
+  if ( l_rtma3d  .and. gustob )  then
+     write(6,'(1x,A,1x,A,A,5(1x,I9))') 'read_prepbufr:: for obstype=',            &
+       trim(adjustl(obstype)), ': kcount values from find wind height = ',kcount
   end if
 
 
@@ -3363,8 +3438,11 @@ subroutine sonde_ext(obsdat,tpc,qcmark,obserr,drfdat,levsio,kx,vtcd)
 
 ! !INPUT PARAMETERS:
   integer(i_kind)                                  , intent(in   ) ::kx
+#ifdef BUFR12  
+  integer(i_kind)                                  , intent(in   ) ::vtcd
+#else
   real(r_double)                                   , intent(in   ) ::vtcd
-
+#endif  
 ! !INPUT/OUTPUT PARAMETERS:
   integer(i_kind)                                  , intent(inout) ::levsio
   real(r_double),dimension(13,255), intent(inout) :: obsdat

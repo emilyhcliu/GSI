@@ -21,7 +21,7 @@ export gsi_namelist="
    crtm_coeffs_path='./crtm_coeffs/',
    newpc4pred=.true.,adp_anglebc=.true.,angord=4,passive_bc=.true.,use_edges=.false.,
    diag_precon=.true.,step_start=1.e-3,emiss_bc=.true.,thin4d=.true.,cwoption=3,
-   verbose=.false.,imp_physics=11,lupp=.true.,binary_diag=.false.,netcdf_diag=.true.,
+   verbose=.false.,imp_physics=8,lupp=.true.,binary_diag=.false.,netcdf_diag=.true.,
    lobsdiag_forenkf=.false.,
    nhr_anal=3,6,9,
    l4densvar=.true.,ens_nstarthr=3,nhr_obsbin=1,nhr_assimilation=6,lwrite4danl=.true., tzr_qc=1,sfcnst_comb=.true.,
@@ -159,6 +159,9 @@ OBS_INPUT::
    ahibufr        ahi         himawari8   ahi_himawari8       0.0     1     0
    abibufr        abi         g16         abi_g16             0.0     1     0
    abibufr        abi         g17         abi_g17             0.0     1     0
+   ahibufr        ahi         himawari9   ahi_himawari9       0.0     1     0
+   abibufr        abi         g18         abi_g18             0.0     1     0
+   abibufr        abi         g19         abi_g19             0.0     1     0
    rapidscatbufr  uv          null        uv                  0.0     0     0
    ompsnpbufr     ompsnp      npp         ompsnp_npp          0.0     0     0
    ompstcbufr     ompstc8     npp         ompstc8_npp         0.0     2     0
@@ -166,6 +169,7 @@ OBS_INPUT::
    mhsbufr        mhs         metop-c     mhs_metop-c         0.0     1     1
    iasibufr       iasi        metop-c     iasi_metop-c        0.0     1     1
    ompslpbufr     ompslp      npp         ompslp_npp          0.0     1     1
+   mwsbufr        mws         metop-sg-a1 mws_metop-sg-a1     0.0     1     0
 ::
   &SUPEROB_RADAR
    $SUPERRAD
@@ -452,6 +456,7 @@ OBS_INPUT::
    lghtInGSI      lghtn       null      lghtn                1.0     0     0
    larcInGSI      larccld     null      larccld              1.0     0     0
    abibufr        abi         g18       abi_g18              0.0     2     0
+   abibufr        abi         g18       abi_g19              0.0     2     0
 ::
  &SUPEROB_RADAR
    del_azimuth=5.,del_elev=.25,del_range=5000.,del_time=.5,elev_angle_max=5.,minnum=50,range_max=100000., l2superob_only=.false.,
