@@ -189,6 +189,7 @@ module qcmod
   public :: qc_gmi
   public :: qc_amsr2
   public :: qc_saphir
+  public :: qc_tms
 
 ! set passed variables to public
   public :: npres_print,nlnqc_iter,varqc_iter,pbot,ptop,c_varqc,njqc,vqc,nvqc,hub_norm
@@ -3956,6 +3957,109 @@ subroutine qc_atms(nchanl,is,ndat,nsig,npred,sea,land,ice,snow,mixed,luse,   &
   return
 
 end subroutine qc_atms
+!<<emily
+
+subroutine qc_tms(nchanl,is,ndat,nsig,npred,sea,land,ice,snow,mixed,luse,   &
+                  zsges,cenlat,tbc,ptau5,emissivity_k,ts, &
+                  pred,predchan,id_qc,aivals,errf,errf0,varinv, &
+                  error0,radmod)
+
+!$$$ subprogram documentation block
+!               .      .    .
+! subprogram:  qc_tms    QC for TMS data
+!
+!   prgmmr: eliu           org: np23            date: 2024-08-28
+!
+! abstract: set quality control criteria for TMS data               
+!
+! program history log:
+!     2024-08-28  eliu - initial 
+!
+! input argument list:
+!     nchanl       - number of channels per obs
+!     is           - integer counter for number of observation types to process
+!     npred        - number of predictors
+!     sea          - logical, sea flag
+!     land         - logical, land flag
+!     ice          - logical, ice flag
+!     snow         - logical, snow flag
+!     mixed        - logical, mixed flag
+!     luse         - logical use flag
+!     zsges        - elevation of guess
+!     tbc          - simulated - observed BT with bias correction
+!     ptau5        - transmittances as a function of level and channel
+!     emissivity_k - surface emissivity sensitivity
+!     ts           - skin temperature sensitivity
+!     pred         - bias correction predictors
+!     predchan     - bias correction coefficients
+!     id_qc        - qc index - see qcmod definition
+!     aivals       - array holding sums for various statistics as a function of obs type
+!     errf         - criteria of gross error
+!     varinv       - observation weight (modified obs var error inverse)
+!
+! output argument list:
+!     id_qc        - qc index - see qcmod definition
+!     aivals       - array holding sums for various statistics as a function of obs type
+!     errf         - criteria of gross error
+!     varinv       - observation weight (modified obs var error inverse)
+!
+! attributes:
+!     language: f90
+!
+!$$$ end documentation block
+
+  use kinds, only: r_kind, i_kind
+  use mpeu_util, only: getindex
+  use gsi_metguess_mod, only: gsi_metguess_get
+  use radinfo, only: emiss_bc
+  implicit none
+
+! Declare passed variables
+
+  logical,                             intent(in   ) :: sea,land,ice,snow,mixed,luse
+  integer(i_kind),                     intent(in   ) :: ndat,nsig,npred,nchanl,is
+  integer(i_kind),dimension(nchanl),   intent(inout) :: id_qc
+  real(r_kind),                        intent(in   ) :: zsges,cenlat
+  real(r_kind),dimension(40,ndat),     intent(inout) :: aivals
+  real(r_kind),dimension(nchanl),      intent(in   ) :: tbc,emissivity_k,ts
+  real(r_kind),dimension(nsig,nchanl), intent(in   ) :: ptau5
+  real(r_kind),dimension(npred,nchanl),intent(in   ) :: pred,predchan
+  real(r_kind),dimension(nchanl),      intent(inout) :: errf,errf0,varinv
+  real(r_kind),dimension(nchanl),      intent(in   ) :: error0
+  type(rad_obs_type),                  intent(in   ) :: radmod
+
+! Declare local parameters
+
+  real(r_kind)    :: demisf,dtempf,efact,dtbf,term,cenlatx,fact
+  real(r_kind)    :: efactmc,vfactmc,dtde1,dtde2,dtde3,dtde15,dsval,clwx
+  integer(i_kind) :: i
+  logical qc4emiss
+  logical eff_area
+
+  if(sea)then
+     demisf = r0_01
+     dtempf = half
+  else if(land)then
+     demisf = r0_02
+     dtempf = two
+  else if(ice)then
+     demisf = 0.015_r_kind
+     dtempf = one
+  else if(snow)then
+     demisf = r0_02
+     dtempf = two
+  else
+     demisf = 0.20_r_kind
+     dtempf = 4.5_r_kind
+  end if
+
+!  write(6,*)'emily checking QC to be impemented for TMS Tomorrow.io ...'
+
+  return
+
+end subroutine qc_tms
+!<<emily
+
 subroutine qc_ssu(nchanl,is,ndat,nsig,sea,land,ice,snow,luse,   &
      zsges,cenlat,tb_obs,ptau5,emissivity_k,ts,      &
      id_qc,aivals,errf,varinv)

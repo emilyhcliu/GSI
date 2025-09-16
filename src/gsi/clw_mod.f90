@@ -38,7 +38,7 @@ implicit none
 ! set default to private
   private
 ! set routines used externally to public
-  public :: calc_clw, ret_amsua, gmi_37pol_diff
+  public :: calc_clw, ret_amsua, gmi_37pol_diff, calc_scat_index_tms !emily
 
 contains
 
@@ -2047,5 +2047,63 @@ subroutine gmi_37pol_diff(tb37v,tb37h,tsim37v,tsim37h,clw,ierrret)
      endif
 
 end subroutine gmi_37pol_diff
+
+!>>emily
+subroutine calc_scat_index_tms(tb01, tb02, tb12, ierrret, lsi, isi)
+!$$$  subprogram documentation block
+!                .      .    .                                       .
+! subprogram:  calc_scat_index 
+!
+!  prgmmr: eliu        org: EMC 
+!
+! program history log:
+!      2025-02-19  eliu    - Calculate scattering index from two window channels 
+!
+!  input argument list:
+!     tb01          - channel 1 brightness temperature 
+!     tb02          - channel 1 brightness temperature 
+!     tb12          - channel 1 brightness temperature 
+!
+!   output argument list:
+!     lsi               - scattering index for liquid hydrometers 
+!     isi               - scattering index for solid hydrometers 
+!     ierrret           - return flag     
+!
+! attributes:
+!   language: f90
+!   machine:  ibm RS/6000 SP
+!
+!$$$
+!
+  use kinds, only: r_kind, i_kind
+  use constants, only: zero
+  implicit none
+
+  real(r_kind),    intent(in   ) :: tb01, tb02, tb12
+  real(r_kind),    intent(  out) :: lsi, isi 
+  integer(i_kind), intent(  out) :: ierrret
+
+  real(r_kind), parameter:: tbmax = 500._r_kind
+  real(r_kind), parameter:: tbmin = zero
+
+! Initialize scat_index to a missing value
+  lsi = 1000.0
+  isi = 1000.0
+
+  ! Check if both tb_high and tb_low are in [0,tbmax]
+  if ((tb01 >= 0.0 .and. tb01 <= 500.0) .and. &
+      (tb02 >= 0.0 .and. tb02 <= 500.0) .and. & 
+      (tb12 >= 0.0 .and. tb12 <= 500.0)) then
+
+     ! Define how you want to calculate the scattering index
+     lsi = tb01 - tb02 
+     isi = tb01 - tb12
+     ierrret = 0 
+  else
+     ierrret = 1
+  end if
+
+end subroutine calc_scat_index_tms
+!<<emily
 
 end module clw_mod

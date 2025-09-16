@@ -286,9 +286,9 @@ contains
       ifrac_sea,ifrac_lnd,ifrac_ice,ifrac_sno,itsavg, &
       izz,idomsfc,isfcr,iff10,ilone,ilate, &
       isst_hires,isst_navy,idata_type,iclr_sky,itref,idtw,idtc,itz_tr
-  use qcmod, only: qc_ssmi,qc_geocsr,qc_ssu,qc_avhrr,qc_goesimg,qc_msu,qc_irsnd,qc_amsua,qc_mhs,qc_atms
+  use qcmod, only: qc_ssmi,qc_geocsr,qc_ssu,qc_avhrr,qc_goesimg,qc_msu,qc_irsnd,qc_amsua,qc_mhs,qc_atms,qc_tms
   use crtm_interface, only: ilzen_ang2,iscan_ang2,iszen_ang2,isazi_ang2
-  use clw_mod, only: calc_clw, ret_amsua, gmi_37pol_diff
+  use clw_mod, only: calc_clw, ret_amsua, gmi_37pol_diff, calc_scat_index_tms
   use qcmod, only: igood_qc,ifail_gross_qc,ifail_interchan_qc,ifail_crtm_qc,ifail_satinfo_qc,qc_noirjaco3,ifail_cloud_qc
   use qcmod, only: ifail_crtm_nan  
   use qcmod, only: ifail_cao_qc,cao_check  
@@ -359,6 +359,7 @@ contains
   real(r_kind) sfc_speed,frac_sea,tpwc_obs,sgagl,tpwc_guess_retrieval
   real(r_kind) gwp,clw_obs
   real(r_kind) scat,scatp,asum
+  real(r_kind) isi,lsi !emily
   real(r_kind) dtsavg,r90,coscon,sincon
   real(r_kind) bias       
   real(r_kind) factch6    
@@ -370,7 +371,7 @@ contains
   logical cao_flag                       
   logical hirs2,msu,goessndr,hirs3,hirs4,hirs,amsua,amsub,airs,hsb,goes_img,ahi,mhs,abi
   type(sparr2) :: dhx_dx
-  logical avhrr,avhrr_navy,viirs,lextra,ssu,iasi,iasing,cris,seviri,atms
+  logical avhrr,avhrr_navy,viirs,lextra,ssu,iasi,iasing,cris,seviri,atms,tms
   logical ssmi,ssmis,amsre,amsre_low,amsre_mid,amsre_hig,amsr2,gmi,saphir
   logical :: mws
   logical ssmis_las,ssmis_uas,ssmis_env,ssmis_img
@@ -410,7 +411,7 @@ contains
   real(r_kind),dimension(nchanl):: cld_rbc_idx,cld_rbc_idx2
   real(r_kind),dimension(nchanl):: tcc         
   real(r_kind) :: ptau5deriv, ptau5derivmax
-  real(r_kind) :: clw_guess,clw_guess_retrieval,ciw_guess,rain_guess,snow_guess,clw_avg
+  real(r_kind) :: clw_guess,clw_guess_retrieval,ciw_guess,rain_guess,snow_guess,graupel_guess,clw_avg
   real(r_kind),dimension(:), allocatable :: rsqrtinv
   real(r_kind),dimension(:), allocatable :: rinvdiag
 
@@ -530,6 +531,7 @@ contains
   cris       = obstype == 'cris' .or. obstype == 'cris-fsr'
   seviri     = obstype == 'seviri'
   atms       = obstype == 'atms'
+  tms        = obstype == 'tms'
   saphir     = obstype == 'saphir'
   abi        = obstype == 'abi'
   mws        = obstype == 'mws'
@@ -538,7 +540,7 @@ contains
 
   microwave=amsua .or. amsub  .or. mhs .or. msu .or. hsb .or. &
             ssmi  .or. ssmis  .or. amsre .or. atms .or. mws .or. &
-            amsr2 .or. gmi  .or.  saphir
+            amsr2 .or. gmi  .or.  saphir  .or. tms 
 
   microwave_low =amsua  .or.  msu .or. ssmi .or. ssmis .or. amsre
 
@@ -923,7 +925,7 @@ contains
         total_cloud_cover=zero
         if (radmod%lcloud_fwd) then
           call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
-             tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
+             tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,graupel_guess,prsltmp,prsitmp, &
              trop5,tzbgr,dtsavg,sfc_speed, &
              tsim,emissivity,chan_level,ptau5,ts,emissivity_k, &
                 temp,wmix,jacobian,error_status,tsim_clr=tsim_clr,tcc=tcc, & 
@@ -934,7 +936,7 @@ contains
              data_s(ilzen_ang:iscan_ang, n) = data_s(ilzen_ang2:iscan_ang2, n)
              data_s(iszen_ang:isazi_ang, n) = data_s(iszen_ang2:isazi_ang2, n)
              call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
-                tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
+                tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,graupel_guess,prsltmp,prsitmp, &
                  trop5,tzbgr,dtsavg,sfc_speed, &
                  tsim2,emissivity2,chan_level,ptau52,ts2,emissivity_k2, &
                  temp2,wmix2,jacobian2,error_status,tsim_clr=tsim_clr2,tcc=tcc,&
@@ -958,7 +960,7 @@ contains
           cld = total_cloud_cover
         else
           call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
-             tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
+             tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,graupel_guess,prsltmp,prsitmp, &
              trop5,tzbgr,dtsavg,sfc_speed, &
              tsim,emissivity,chan_level,ptau5,ts,emissivity_k, &
              temp,wmix,jacobian,error_status)
@@ -968,7 +970,7 @@ contains
              data_s(ilzen_ang:iscan_ang, n) = data_s(ilzen_ang2:iscan_ang2, n)
              data_s(iszen_ang:isazi_ang, n) = data_s(iszen_ang2:isazi_ang2, n)
              call call_crtm(obstype,dtime,data_s(:,n),nchanl,nreal,ich, &
-                tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,prsltmp,prsitmp, &
+                tvp,qvp,qs,clw_guess,ciw_guess,rain_guess,snow_guess,graupel_guess,prsltmp,prsitmp, &
                  trop5,tzbgr,dtsavg,sfc_speed, &
                  tsim2,emissivity2,chan_level,ptau52,ts2,emissivity_k2, &
                  temp2,wmix2,jacobian2,error_status)
@@ -1063,7 +1065,8 @@ contains
         gwp=zero
         tpwc_guess_retrieval=zero
         scatp=zero
-        scat=zero  
+        scat=zero
+        lsi=zero; isi=zero 
         ierrret=0
         tpwc_obs=zero
         kraintype=0
@@ -1072,7 +1075,9 @@ contains
         if(microwave .and. sea) then 
            if(radmod%lcloud_fwd .and. (amsua .or. atms .or. mws)) then
               call ret_amsua(tb_obs,nchanl,tsavg5,zasat,clw_obs,ierrret,scat=scat)
-              scatp=scat 
+              scatp=scat
+            else if (tms) then
+              call calc_scat_index_tms(tb_obs(1), tb_obs(2), tb_obs(12), ierrret, lsi, isi)
            else
               call calc_clw(nadir,tb_obs,tsim,ich,nchanl,no85GHz,amsua,ssmi,ssmis,amsre,atms, &
                    mws,amsr2,gmi,saphir,tsavg5,sfc_speed,zasat,clw_obs,tpwc_obs,gwp,kraintype,ierrret)
@@ -1094,6 +1099,11 @@ contains
                 id_qc(1:8) = ifail_cloud_qc
                 varinv(17:24)=zero
                 id_qc(17:24) = ifail_cloud_qc
+             else if (tms) then 
+                varinv(1:8)=zero
+                id_qc(1:8) = ifail_cloud_qc
+                varinv(9:12)=zero
+                id_qc(9:12) = ifail_cloud_qc
              else       
                 varinv(1:nchanl)=zero
                 id_qc(1:nchanl) = ifail_cloud_qc
@@ -1501,6 +1511,19 @@ contains
               zsges,cenlat,tb_obsbc1,cosza,clw_obs,tbc,ptau5,emissivity_k,ts, & 
               pred,predchan,id_qc,aivals,errf,errf0,clw_obs,varinv,cldeff_obs,cldeff_fg,factch6, &
               cld_rbc_idx,sfc_speed,error0,clw_guess_retrieval,scatp,radmod)                   
+
+!>>emily
+!  ---------- TMS -------------------
+!       QC TMS data
+
+        else if (tms) then
+
+           call qc_tms(nchanl,is,ndat,nsig,npred,sea,land,ice,snow,mixed,luse(n),   &
+                       zsges,cenlat,tbc,ptau5,emissivity_k,ts, &
+                       pred,predchan,id_qc,aivals,errf,errf0,varinv, &
+                       error0,radmod)
+!<emily
+
 
 !  ---------- GOES imager --------------
 !       GOES imager Q C
@@ -2709,6 +2732,14 @@ contains
                  call nc_diag_metadata_to_single("TPWC",tpwc_obs                            )
                  call nc_diag_metadata_to_single("clw_obs",clw_obs                         )
                  call nc_diag_metadata_to_single("clw_guess",clw_guess                       )
+
+                 call nc_diag_metadata_to_single("ciw_guess",ciw_guess                       )
+                 call nc_diag_metadata_to_single("rain_guess",rain_guess                     )
+                 call nc_diag_metadata_to_single("snow_guess",snow_guess                     )
+                 call nc_diag_metadata_to_single("graupel_guess",graupel_guess               )
+
+                 call nc_diag_metadata_to_single("lsi_obs",lsi                               )
+                 call nc_diag_metadata_to_single("isi_obs",isi                               )
 
                  if (nstinfo==0) then
                     data_s(itref,n)  = missing

@@ -475,6 +475,14 @@ subroutine init_crtm(init_pass,mype_diaghdr,mype,nchanl,nreal,isis,obstype,radmo
     Load_CloudCoeff = .false.
  endif
 
+! write(6,*) 'emily checking radmod%lcloud_fwd   = ', radmod%lcloud_fwd
+! write(6,*) 'emily checking radmod%cld_effect   = ', radmod%cld_effect
+! write(6,*) 'emily checking radmod%cld_sea_only = ', radmod%cld_sea_only
+! write(6,*) 'emily checking n_actual_clouds = ', n_actual_clouds
+! write(6,*) 'emily checking n_clouds_fwd_wk = ', n_clouds_fwd_wk
+! write(6,*) 'emily checking lprecip_wk = ', lprecip_wk
+! write(6,*) 'emily checking fv3_full_hydro = ', fv3_full_hydro 
+
 ! Set up index for input satellite data array
 
  isatid    = 1  ! index of satellite id
@@ -1000,7 +1008,7 @@ subroutine destroy_crtm
   return
 end subroutine destroy_crtm
 subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
-                   h,q,qs,clw_guess,ciw_guess,rain_guess,snow_guess,prsl,prsi, &
+                   h,q,qs,clw_guess,ciw_guess,rain_guess,snow_guess,graupel_guess,prsl,prsi, &
                    trop5,tzbgr,dtsavg,sfc_speed,&
                    tsim,emissivity,chan_level,ptau5,ts, &
                    emissivity_k,temp,wmix,jacobian,error_status,tsim_clr,tcc, & 
@@ -1129,7 +1137,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   integer(i_kind)                       ,intent(  out) :: error_status
   real(r_kind),dimension(nsig,nchanl)   ,intent(  out) :: temp,ptau5,wmix
   real(r_kind),dimension(nsigradjac,nchanl),intent(out):: jacobian
-  real(r_kind)                          ,intent(  out) :: clw_guess,ciw_guess,rain_guess,snow_guess
+  real(r_kind)                          ,intent(  out) :: clw_guess,ciw_guess,rain_guess,snow_guess,graupel_guess
   real(r_kind),dimension(nchanl)        ,intent(  out), optional  :: tsim_clr      
   real(r_kind),dimension(nchanl)        ,intent(  out), optional  :: tcc       
   real(r_kind)                          ,intent(  out), optional  :: tcwv              
@@ -2055,6 +2063,7 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
   ciw_guess = zero
   rain_guess = zero
   snow_guess = zero
+  graupel_guess = zero
 
   if (n_actual_aerosols_wk>0) then
      do k = 1, nsig
@@ -2157,6 +2166,16 @@ subroutine call_crtm(obstype,obstime,data_s,nchanl,nreal,ich, &
               do ii=1,n_clouds_fwd_wk
                  if (cloud_cont(k,ii) >= 1.0e-6_r_kind) hwp_guess(ii) = hwp_guess(ii) +  cloud_cont(k,ii)        
               enddo
+
+!             clw_guess = clw_guess +  cloud_cont(k,1)
+              clw_guess = zero
+              clw_guess = clw_guess +  cloud_cont(k,1)
+              ciw_guess = ciw_guess +  cloud_cont(k,2)
+              if (lprecip_wk .and. (imp_physics == 8 .or. imp_physics == 11)) then 
+                 rain_guess = rain_guess +  cloud_cont(k,3)
+                 snow_guess = snow_guess +  cloud_cont(k,4)
+                 graupel_guess = graupel_guess +  cloud_cont(k,5)
+              endif
 
                 !Add lower bound to all hydrometers 
                 !note: may want to add lower bound value for effective radius  

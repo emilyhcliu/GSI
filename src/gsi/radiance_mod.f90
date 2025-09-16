@@ -347,7 +347,8 @@ contains
     character(10),dimension(ndat) :: rtype,rrtype,drtype
     logical print_verbose
 
-    print_verbose=.false.
+!   print_verbose=.false.  
+    print_verbose=.true.   !emily
     if(verbose)print_verbose=.true.
 !   Cross-check 
     do j=1,jpch_rad
@@ -394,6 +395,7 @@ contains
 
 !   determine rads type
     drtype='other'
+!   write(6,*) 'emily checking radiance_obstype_init: ndat = ', ndat
     do i=1,ndat
        rtype(i)=dtype(i)                   !     rtype  - observation types to process
        if (index(dtype(i),'amsre') /= 0)  rtype(i)='amsre'
@@ -413,12 +415,13 @@ contains
           rtype(i) == 'ssmi'   .or. rtype(i) == 'atms'     .or.  rtype(i) == 'cris'   .or. & 
           rtype(i) == 'amsr2'  .or. rtype(i) == 'gmi'      .or.  rtype(i) == 'saphir' .or. &
           rtype(i) == 'cris-fsr' .or. rtype(i) == 'abi'    .or.  rtype(i) == 'viirs'  .or. &
-          rtype(i) == 'iasi-ng'  .or. rtype(i) == 'mws' )then
+          rtype(i) == 'iasi-ng'  .or. rtype(i) == 'mws'    .or.  rtype(i) == 'tms') then
           drtype(i)='rads'
        end if
+!   write(6,*) 'emily checking radiance_obstype_init: dtype = ', dtype(i), drtype(i)
     end do
- 
-!   Determine total rad types
+
+    !   Determine total rad types
     k=0
     k2i=0
     first=.true.

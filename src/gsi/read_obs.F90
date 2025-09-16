@@ -151,6 +151,7 @@ subroutine read_obs_check (lexist,filename,jsatid,dtype,minuse,nread)
 !    jsatid    - satellite id
 !    dtype     - satellite type
 !
+!
 !   output argument list:
 !    lexist    - file status
 !
@@ -949,7 +950,7 @@ subroutine read_obs(ndata,mype)
                obstype == 'ahi'       .or. avhrr                  .or.  &
                amsre  .or. ssmis      .or. obstype == 'ssmi'      .or.  &
                obstype == 'ssu'       .or. obstype == 'atms'      .or.  &
-               obstype == 'mws'       .or.                              &
+               obstype == 'mws'       .or. obstype == 'tms'       .or.  &
                obstype == 'cris'      .or. obstype == 'cris-fsr'  .or.  &
                obstype == 'amsr2'     .or. obstype == 'viirs-m'   .or.  obstype == 'metimage' .or. &
                obstype == 'gmi'       .or. obstype == 'saphir'   ) then
@@ -1049,6 +1050,8 @@ subroutine read_obs(ndata,mype)
              else if(obstype == 'atms')then
 !                 parallel_read(i)= .true.
              else if(obstype == 'mws')then
+!                 parallel_read(i)= .true.
+             else if(obstype == 'tms')then
 !                 parallel_read(i)= .true.
              else if(ssmis)then
 !               parallel_read(i)= .true.  
@@ -1777,6 +1780,14 @@ subroutine read_obs(ndata,mype)
                      mype_root,mype_sub(mm1,i),npe_sub(i),mpi_comm_sub(i),nobs_sub1(1,i),&
                      read_rec(i),read_ears_rec(i),read_db_rec(i),dval_use,radmod)
                 string='READ_MWS'
+
+!            Process tms data
+             else if (obstype == 'tms') then
+                call read_tms(mype,val_dat,ithin,isfcalc,rmesh,dplat(i),gstime,&
+                     infile,lunout,obstype,nread,npuse,nouse,twind,sis, &
+                     mype_root,mype_sub(mm1,i),npe_sub(i),mpi_comm_sub(i),nobs_sub1(1,i),&
+                     read_rec(i),dval_use,radmod)
+                string='READ_TMS'
 
 !            Process saphir data
              else if (obstype == 'saphir') then

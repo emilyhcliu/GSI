@@ -528,6 +528,7 @@ read_sfcwnd.f90
 read_ssmi.f90
 read_ssmis.f90
 read_tcps.f90
+read_tms.f90
 read_viirs.f90
 read_wcpbufr.f90
 reorg_metar_cloud.f90
